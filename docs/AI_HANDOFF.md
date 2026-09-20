@@ -38,7 +38,7 @@ Treat archive files as historical/debug context, not the current implementation.
 - Must request Administrator rights.
 - Do not assume SHOPTIDA SP46: list all installed Windows printer drivers.
 - Use RAW ports 9101/9102/9103.
-- V3.2 avoids `-SNMP 0` with `Add-PrinterPort`; fallback to `prnport.vbs` when needed.
+- V3.3 avoids `-SNMP 0` with `Add-PrinterPort`; fallback to `prnport.vbs` when needed.
 - Discovery should consider both setup network `192.168.10.x` and the customer's home LAN such as `192.168.1.x`.
 
 ## Known caution
