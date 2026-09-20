@@ -82,7 +82,7 @@ jobs:
             @{ Name = "PrintUI settings mode"; Text = "/Xs"; Source = $main },
             @{ Name = "Direct mode cleared"; Text = '"-direct"'; Source = $main },
             @{ Name = "Queued mode cleared"; Text = '"-queued"'; Source = $main },
-            @{ Name = "Existing queue updated in place"; Text = "Set-Printer -Name $name -DriverName $driver -PortName $portName"; Source = $main },
+            @{ Name = "Existing queue updated in place"; Text = 'Set-Printer -Name $name -DriverName $driver -PortName $portName'; Source = $main },
             @{ Name = "Watcher paused during queue mutation"; Text = "Pause-LumitoolJobWatcher"; Source = $main },
             @{ Name = "Watcher resumed after queue mutation"; Text = "Resume-LumitoolJobWatcher"; Source = $main },
             @{ Name = "Printer name quoted for PrintUI"; Text = '$safeName'; Source = $main },
