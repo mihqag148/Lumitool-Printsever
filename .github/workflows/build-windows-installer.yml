@@ -78,7 +78,7 @@ jobs:
             @{ Name = "Installer includes main setup"; Text = "Lumitool_Printsever_Setup_V3_8.ps1"; Source = $iss },
             @{ Name = "Installer includes watcher"; Text = "Lumitool_Job_Watcher_V1.ps1"; Source = $iss },
             @{ Name = "Installer auto launches setup"; Text = "[Run]"; Source = $iss },
-            @{ Name = "OTA dialog"; Text = "Show-OtaWindow"; Source = $main },
+            @{ Name = "OTA dialog"; Text = "Start-LumitoolOta"; Source = $main },
             @{ Name = "OTA prepare"; Text = "/support/prepare"; Source = $ota },
             @{ Name = "OTA upload"; Text = "/update"; Source = $ota },
             @{ Name = "Shortcut path fixed"; Text = "Repair - Sync Print Jobs"; Source = $iss }
