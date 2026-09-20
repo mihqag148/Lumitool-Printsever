@@ -18,4 +18,4 @@
 - V2.2: discovery type compatibility fix.
 - V3: Lumitool naming and firmware identity/discovery integration.
 - V3.1: expanded local-network discovery.
-- V3.2: Standard TCP/IP port creation fix; removed invalid SNMP=0 usage and added `prnport.vbs` fallback.
+- V3.3: Standard TCP/IP port creation fix; removed invalid SNMP=0 usage and added `prnport.vbs` fallback.
