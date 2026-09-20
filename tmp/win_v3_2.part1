@@ -1,0 +1,579 @@
+                      $remote =
+                                New-Object
+                                System.Net.IPEndPoint(
+                                    [System.Net.IPAddress]::Any,
+                                    0
+                                )
+
+                            $bytes =
+                                $udp.Receive(
+                                    [ref]$remote
+                                )
+
+                            $json =
+                                [System.Text.Encoding]::UTF8.
+                                GetString($bytes)
+
+                            $o =
+                                $json |
+                                ConvertFrom-Json
+
+                            if (
+                                [string]$o.magic -eq
+                                "LUMITOOL_PRINTSEVER"
+                            ) {
+                                $ip =
+                                    [string]$remote.Address
+
+                                if (
+                                    -not
+                                    $seen.ContainsKey($ip)
+                                ) {
+                                    $seen[$ip] =
+                                        $true
+
+                                    $name =
+                                        "Lumitool-Printsever-" +
+                                        [string]$o.id
+
+                                    $results +=
+                                        [pscustomobject]@{
+                                            IP = $ip
+                                            Name = $name
+                                            Strong = $true
+                                        }
+
+                                    UiLog(
+                                        "UDP tìm thấy " +
+                                        $name +
+                                        " @ " +
+                                        $ip
+                                    )
+                                }
+                            }
+                        } else {
+                            Start-Sleep `
+                                -Milliseconds 35
+                        }
+                    } catch {
+                        Start-Sleep `
+                            -Milliseconds 20
+                    }
+                }
+
+            } catch {
+                UiLog(
+                    "UDP trên card " +
+                    $adapter.IP +
+                    " lỗi: " +
+                    $_.Exception.Message
+                )
+            } finally {
+                if ($udp) {
+                    try {
+                        $udp.Close()
+                    } catch {}
+                }
+            }
+        }
+
+        return $results
+    }
+
+
+    function Find-Devices {
+        $script:ScanResults = @()
+        $script:ScanSeen = @{}
+
+        # Show exactly what networks are being searched.
+        foreach (
+            $adapter in @(Get-ActiveIPv4Adapters)
+        ) {
+            UiLog(
+                "Mạng đang dùng: " +
+                $adapter.IP +
+                "/" +
+                $adapter.Prefix +
+                " -> quét " +
+                $adapter.Base +
+                ".1-254"
+            )
+        }
+
+        # 0) Direct setup IP.
+        UiLog(
+            "Kiểm tra setup IP 192.168.10.1"
+        )
+
+        Register-ScanDevice (
+            Get-LumitoolIdentity `
+                -IP "192.168.10.1"
+        )
+
+        # 1) Previously saved IPs.
+        foreach (
+            $cached in @(Load-CachedDevices)
+        ) {
+            $ip =
+                [string]$cached.IP
+
+            if (
+                [string]::IsNullOrWhiteSpace(
+                    $ip
+                )
+            ) {
+                continue
+            }
+
+            UiLog(
+                "Kiểm tra IP đã lưu: " +
+                $ip
+            )
+
+            Register-ScanDevice (
+                Get-LumitoolIdentity `
+                    -IP $ip
+            )
+        }
+
+        # 2) UDP on every active adapter.
+        UiLog(
+            "UDP discovery trên tất cả card mạng..."
+        )
+
+        foreach (
+            $d in @(Find-LumitoolUdp)
+        ) {
+            Register-ScanDevice $d
+        }
+
+        # 3) Windows ARP / neighbor table.
+        $neighbors =
+            @(Get-NeighborCandidates)
+
+        if (
+            $neighbors.Count -gt
+            0
+        ) {
+            UiLog(
+                "Kiểm tra ARP/Neighbor: " +
+                $neighbors.Count +
+                " IP"
+            )
+        }
+
+        foreach ($ip in $neighbors) {
+            if (
+                $script:ScanSeen.ContainsKey(
+                    [string]$ip
+                )
+            ) {
+                continue
+            }
+
+            Register-ScanDevice (
+                Get-LumitoolIdentity `
+                    -IP ([string]$ip)
+            )
+        }
+
+        # 4) Full /24 fallback for every active network.
+        # Also keeps 192.168.10.x in the list for setup.
+        foreach (
+            $base in @(Get-LanBases)
+        ) {
+            UiLog(
+                "TCP fallback: " +
+                $base +
+                ".1-254"
+            )
+
+            $pending = @()
+
+            for (
+                $i = 1;
+                $i -le 254;
+                $i++
+            ) {
+                $ip =
+                    $base +
+                    "." +
+                    $i
+
+                if (
+                    $script:ScanSeen.ContainsKey(
+                        $ip
+                    )
+                ) {
+                    continue
+                }
+
+                $c =
+                    New-Object
+                    System.Net.Sockets.TcpClient
+
+                try {
+                    $a =
+                        $c.BeginConnect(
+                            [string]$ip,
+                            [int]80,
+                            $null,
+                            $null
+                        )
+
+                    $pending +=
+                        [pscustomobject]@{
+                            IP = [string]$ip
+                            Client = $c
+                            Async = $a
+                        }
+                } catch {
+                    try {
+                        $c.Close()
+                    } catch {}
+                }
+            }
+
+            Start-Sleep `
+                -Milliseconds 800
+
+            foreach ($p in $pending) {
+                try {
+                    if (
+                        $p.Async.IsCompleted
+                    ) {
+                        $p.Client.EndConnect(
+                            $p.Async
+                        )
+
+                        if (
+                            $p.Client.Connected
+                        ) {
+                            $ipKey =
+                                [string]$p.IP
+
+                            if (
+                                -not
+                                $script:ScanSeen.ContainsKey(
+                                    $ipKey
+                                )
+                            ) {
+                                $dev =
+                                    Get-LumitoolIdentity `
+                                        -IP $ipKey
+
+                                if ($dev) {
+                                    Register-ScanDevice $dev
+
+                                    UiLog(
+                                        "TCP tìm thấy " +
+                                        $dev.Name +
+                                        " @ " +
+                                        $ipKey
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } catch {
+                } finally {
+                    try {
+                        $p.Client.Close()
+                    } catch {}
+                }
+            }
+
+            [System.Windows.Forms.Application]::
+                DoEvents()
+        }
+
+        return @(
+            $script:ScanResults
+        )
+    }
+
+    function Auto-Find {
+        $btnFind.Enabled = $false
+        $lblTop.Text = "Đang tìm ESP trong LAN..."
+        [System.Windows.Forms.Application]::DoEvents()
+
+        try {
+            $devices = @(Find-Devices)
+
+            if ($devices.Count -eq 0) {
+                $lblTop.Text = "Không tìm thấy ESP"
+                UiLog "Không tìm thấy Lumitool Printsever"
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Không tìm thấy Lumitool Printsever.`r`n`r`nApp đã quét mạng nhà và 192.168.10.x. Nếu đang cài lần đầu, kết nối Wi-Fi 'Lumitool-Printsever-XXXX' rồi thử lại.",
+                    "Không tìm thấy",
+                    "OK",
+                    "Information"
+                ) | Out-Null
+                return
+            }
+
+            if ($devices.Count -eq 1) {
+                $d = $devices[0]
+                $html = Get-EspHtml -IP $d.IP
+                if (-not $html) { $html = "" }
+
+                Update-Device -IP $d.IP -Html $html
+                $script:CurrentName = $d.Name
+                $lblDevice.Text = $d.Name + "  ·  " + $d.IP
+
+                $lblTop.Text = "Đã tìm thấy"
+                return
+            }
+
+            $dlg = New-Object Windows.Forms.Form
+            $dlg.Text = "Chọn Lumitool Printsever"
+            $dlg.Size = New-Object Drawing.Size(500,330)
+            $dlg.StartPosition = "CenterParent"
+
+            $list = New-Object Windows.Forms.ListBox
+            $list.Location = New-Object Drawing.Point(12,12)
+            $list.Size = New-Object Drawing.Size(460,235)
+
+            foreach ($d in $devices) {
+                [void]$list.Items.Add($d.Name + "    " + $d.IP)
+            }
+
+            if ($list.Items.Count -gt 0) { $list.SelectedIndex = 0 }
+            $dlg.Controls.Add($list)
+
+            $ok = New-Object Windows.Forms.Button
+            $ok.Text = "Chọn"
+            $ok.Location = New-Object Drawing.Point(370,255)
+            $ok.Size = New-Object Drawing.Size(100,32)
+            $ok.DialogResult = [Windows.Forms.DialogResult]::OK
+            $dlg.Controls.Add($ok)
+            $dlg.AcceptButton = $ok
+
+            if ($dlg.ShowDialog($form) -eq [Windows.Forms.DialogResult]::OK) {
+                $d = $devices[$list.SelectedIndex]
+                $html = Get-EspHtml -IP $d.IP
+                if (-not $html) { $html = "" }
+
+                Update-Device -IP $d.IP -Html $html
+                $script:CurrentName = $d.Name
+                $lblDevice.Text = $d.Name + "  ·  " + $d.IP
+
+                $lblTop.Text = "Đã chọn thiết bị"
+            }
+        } catch {
+            $line = $_.InvocationInfo.ScriptLineNumber
+            $stack = $_.ScriptStackTrace
+
+            UiLog (
+                "Auto find lỗi: " +
+                $_.Exception.Message +
+                " | line=" +
+                $line
+            )
+
+            if ($stack) {
+                UiLog ("Stack: " + $stack)
+            }
+
+            $lblTop.Text = "Lỗi khi tìm thiết bị"
+        } finally {
+            $btnFind.Enabled = $true
+        }
+    }
+
+    function Load-Drivers {
+        $cmbDriver.Items.Clear()
+
+        try {
+            $all = @(Get-PrinterDriver -ErrorAction Stop | Sort-Object Name)
+            $script:DriverNames = @($all | ForEach-Object { $_.Name })
+
+            foreach ($name in $script:DriverNames) {
+                [void]$cmbDriver.Items.Add($name)
+            }
+
+            if ($cmbDriver.Items.Count -gt 0) {
+                $cmbDriver.SelectedIndex = 0
+                $lblDriver.Text = "Đã tìm thấy " + $cmbDriver.Items.Count + " driver đã cài trên Windows"
+            } else {
+                $lblDriver.Text = "Chưa có driver máy in nào"
+            }
+
+            UiLog ("Đã nạp " + $cmbDriver.Items.Count + " driver")
+        } catch {
+            $lblDriver.Text = "Không đọc được driver"
+            UiLog ("Đọc driver lỗi: " + $_.Exception.Message)
+        }
+    }
+
+    function Filter-Drivers {
+        $q = $txtDriverSearch.Text.Trim()
+
+        $cmbDriver.Items.Clear()
+
+        $matches = $script:DriverNames
+        if ($q) {
+            $matches = @($script:DriverNames | Where-Object { $_ -like ("*" + $q + "*") })
+        }
+
+        foreach ($name in $matches) {
+            [void]$cmbDriver.Items.Add($name)
+        }
+
+        if ($cmbDriver.Items.Count -gt 0) {
+            $cmbDriver.SelectedIndex = 0
+        }
+
+        $lblDriver.Text = $cmbDriver.Items.Count.ToString() + " driver phù hợp"
+    }
+
+    function Find-PrnPortVbs {
+        $root =
+            Join-Path `
+                $env:WINDIR `
+                "System32\Printing_Admin_Scripts"
+
+        if (
+            -not
+            (Test-Path $root)
+        ) {
+            return $null
+        }
+
+        try {
+            $f =
+                Get-ChildItem `
+                    -Path $root `
+                    -Filter "prnport.vbs" `
+                    -File `
+                    -Recurse `
+                    -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+
+            if ($f) {
+                return [string]$f.FullName
+            }
+        } catch {}
+
+        return $null
+    }
+
+    function Ensure-TcpPort {
+        param(
+            [string]$PortName,
+            [string]$IP,
+            [int]$TcpPort
+        )
+
+        $existing =
+            Get-PrinterPort `
+                -Name $PortName `
+                -ErrorAction SilentlyContinue
+
+        if ($existing) {
+            UiLog(
+                "PORT: đã tồn tại " +
+                $PortName
+            )
+            return
+        }
+
+        UiLog(
+            "PORT: tạo Standard TCP/IP " +
+            $IP +
+            ":" +
+            $TcpPort
+        )
+
+        # Không truyền tham số SNMP khi tạo bằng Add-PrinterPort.
+        # Một số Windows từ chối index SNMP = 0.
+        try {
+            Add-PrinterPort `
+                -Name ([string]$PortName) `
+                -PrinterHostAddress ([string]$IP) `
+                -PortNumber ([uint32]$TcpPort) `
+                -ErrorAction Stop
+
+            UiLog(
+                "PORT: Add-PrinterPort OK"
+            )
+
+            return
+
+        } catch {
+            UiLog(
+                "PORT: Add-PrinterPort lỗi: " +
+                $_.Exception.Message
+            )
+        }
+
+        # Fallback: Windows built-in prnport.vbs.
+        # RAW custom port + SNMP disabled.
+        $scriptPath =
+            Find-PrnPortVbs
+
+        if (
+            [string]::IsNullOrWhiteSpace(
+                $scriptPath
+            )
+        ) {
+            throw (
+                "Không tạo được TCP port bằng Add-PrinterPort và " +
+                "không tìm thấy prnport.vbs."
+            )
+        }
+
+        UiLog(
+            "PORT: thử fallback prnport.vbs"
+        )
+
+        $args = @(
+            "//NoLogo",
+            $scriptPath,
+            "-a",
+            "-r",
+            $PortName,
+            "-h",
+            $IP,
+            "-o",
+            "raw",
+            "-n",
+            [string]$TcpPort,
+            "-md"
+        )
+
+        $output =
+            & cscript.exe @args 2>&1
+
+        $exit =
+            $LASTEXITCODE
+
+        foreach ($line in @($output)) {
+            if (
+                -not
+                [string]::IsNullOrWhiteSpace(
+                    [string]$line
+                )
+            ) {
+                UiLog(
+                    "PORT/VBS: " +
+                    [string]$line
+                )
+            }
+        }
+
+        if ($exit -ne 0) {
+            throw (
+                "prnport.vbs thất bại, exit code " +
+                $exit
+            )
+        }
+
+        $check =
+            Get-PrinterPort `
+                -Name $PortName `
+                -ErrorAction SilentlyContinue
+
+        if (-not $check) {
+            throw (
+                "Windows báo tạo port xong nhưng không tìm thấy port " +
