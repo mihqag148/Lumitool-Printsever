@@ -81,7 +81,7 @@ jobs:
             @{ Name = "Native Winspool queue configuration"; Text = "SetFastSpoolMode"; Source = $main },
             @{ Name = "Native SetPrinter level 5"; Text = "SetPrinter(hPrinter, 5"; Source = $main },
             @{ Name = "Direct and queued bits cleared"; Text = "0x00000001u"; Source = $main },
-            @{ Name = "No prncnfg queue mutation"; Text = '$output = & cscript.exe @args 2>&1'; Source = $main; MustBeAbsent = $true },
+            @{ Name = "No V4.3 prncnfg queue path"; Text = "QUEUE/PRNCNFG"; Source = $main; MustBeAbsent = $true },
             @{ Name = "No bulk CIM printer mutation"; Text = "Set-CimInstance -InputObject $wmiPrinter"; Source = $main; MustBeAbsent = $true },
             @{ Name = "Queue visibility verification"; Text = "Wait-PrinterVisible"; Source = $main },
             @{ Name = "RAW endpoint verification"; Text = "Test-RawEndpoint"; Source = $main },
