@@ -97,7 +97,7 @@ jobs:
             @{ Name = "Cleanup preserves manufacturer drivers"; Text = "Vendor printer drivers preserved"; Source = $cleanup },
             @{ Name = "Hidden WinExe launcher"; Text = "CreateNoWindow = true"; Source = $launcher },
             @{ Name = "Installer uses EXE launcher"; Text = "Lumitool_Printsever.exe"; Source = $iss },
-            @{ Name = "Installer uses Lumi3D icon"; Text = "SetupIconFile=..\\build\\Lumi3D_logo.ico"; Source = $iss },
+            @{ Name = "Installer uses Lumi3D icon"; Text = "SetupIconFile=..\build\Lumi3D_logo.ico"; Source = $iss },
             @{ Name = "No spooler restart"; Text = "Restart-Service -Name Spooler"; Source = $main; MustBeAbsent = $true }
           )
 
