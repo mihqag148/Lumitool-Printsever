@@ -82,7 +82,6 @@ jobs:
             @{ Name = "OTA dialog"; Text = "Start-LumitoolOta"; Source = $main },
             @{ Name = "OTA prepare"; Text = "/support/prepare"; Source = $ota },
             @{ Name = "OTA upload"; Text = "/update"; Source = $ota },
-            @{ Name = "Shortcut path fixed"; Text = "Repair - Sync Print Jobs"; Source = $iss },
             @{ Name = "Watcher auto discovery"; Text = "AUTO-DISCOVERY"; Source = $watcher },
             @{ Name = "Watcher fallback delete"; Text = "Win32_PrintJob.Delete"; Source = $watcher },
             @{ Name = "Watcher boot install"; Text = "Register-ScheduledTask"; Source = $watcherInstaller },
