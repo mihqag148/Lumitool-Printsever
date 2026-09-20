@@ -26,8 +26,8 @@ try {
     $procs = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         $name = ([string]$_.Name).ToLowerInvariant()
         $cmd = [string]$_.CommandLine
-        ($name -in @("powershell.exe","pwsh.exe","cmd.exe")) -and
-        ($cmd -match "Lumitool_Printsever|Lumitool_Job_Watcher|Lumitool_OTA_Helper|Lumitool_Scan_Helper|Lumitool_Fix_Printing_Status")
+        ($name -in @("powershell.exe","pwsh.exe","cmd.exe","lumitool_printsever.exe")) -and
+        (($name -eq "lumitool_printsever.exe") -or ($cmd -match "Lumitool_Printsever|Lumitool_Job_Watcher|Lumitool_OTA_Helper|Lumitool_Scan_Helper|Lumitool_Fix_Printing_Status"))
     })
 
     foreach ($p in $procs) {
