@@ -38,7 +38,7 @@ Treat archive files as historical/debug context, not the current implementation.
 - Must request Administrator rights.
 - Do not assume SHOPTIDA SP46: list all installed Windows printer drivers.
 - Use RAW ports 9101/9102/9103.
-- V3.3 avoids `-SNMP 0` with `Add-PrinterPort`; fallback to `prnport.vbs` when needed.
+- V3.4 avoids `-SNMP 0` with `Add-PrinterPort`; fallback to `prnport.vbs` when needed.
 - Discovery should consider both setup network `192.168.10.x` and the customer's home LAN such as `192.168.1.x`.
 
 ## Known caution
@@ -48,3 +48,7 @@ The historical firmware revisions were generated iteratively and not every archi
 ## Public repository
 
 This repository is intentionally public. Never add customer Wi-Fi credentials, private keys, signing material or other secrets.
+
+## RAW completion behavior
+
+Firmware V7.6 closes the Windows RAW TCP connection immediately after the job has been transferred to USB, then logs DONE. Windows Setup V3.4 disables SNMP and queue bidirectional status because generic ESP-to-USB forwarding cannot emulate every printer vendor's status protocol.
