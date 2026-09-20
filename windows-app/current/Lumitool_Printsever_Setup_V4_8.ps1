@@ -1682,6 +1682,7 @@ try {
                     ([string]$existingPrinter.DriverName -eq [string]$driver) -and
                     ([string]$existingPrinter.PortName -eq [string]$portName)
                 ) {
+                    # V48_SKIP_SET_PRINTER_MATCH
                     UiLog "QUEUE: printer đã đúng driver/port; bỏ Set-Printer để tránh treo SP46"
                 } else {
                     throw (
