@@ -4,8 +4,8 @@ Public source repository for the Lumitool Printsever project.
 
 ## Current versions
 
-- Firmware: **V7.5** (`firmware/current/`)
-- Windows setup tool: **V3.3** (`windows-app/current/`)
+- Firmware: **V7.6** (`firmware/current/`)
+- Windows setup tool: **V3.4** (`windows-app/current/`)
 - MCU: ESP32-S2
 - USB printer mapping: A=`9101`, B=`9102`, C=`9103`
 
@@ -15,7 +15,7 @@ Lumitool Printsever turns an ESP32-S2 into a Wi-Fi RAW print server for up to 3 
 
 ## Device identity
 
-Firmware V7.5 uses the Wi-Fi STA MAC address. The device name is:
+Firmware V7.6 uses the Wi-Fi STA MAC address. The device name is:
 
 `Lumitool-Printsever-XXXX`
 
