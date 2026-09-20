@@ -25,7 +25,7 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           $required = @(
-            "windows-app/current/Lumitool_Printsever_Setup_V4_6.ps1",
+            "windows-app/current/Lumitool_Printsever_Setup_V4_7.ps1",
             "windows-app/current/Lumitool_Scan_Helper_V1.ps1",
             "windows-app/current/Lumitool_Job_Watcher_V2.ps1",
             "windows-app/current/Lumitool_OTA_Helper_V1.ps1",
@@ -34,7 +34,7 @@ jobs:
             "windows-app/launcher/Lumitool_Printsever_Launcher.cs",
             "windows-app/launcher/Lumitool_Printsever_Launcher.manifest",
             "windows-app/assets/Lumi3D_logo.png",
-            "windows-app/installer/Lumitool_Printsever_V4_6.iss"
+            "windows-app/installer/Lumitool_Printsever_V4_7.iss"
           )
 
           foreach ($path in $required) {
@@ -69,21 +69,23 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V4_6.ps1" -Raw
+          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V4_7.ps1" -Raw
           $ota = Get-Content "windows-app/current/Lumitool_OTA_Helper_V1.ps1" -Raw
           $watcher = Get-Content "windows-app/current/Lumitool_Job_Watcher_V2.ps1" -Raw
           $watcherInstaller = Get-Content "windows-app/current/Lumitool_Watcher_Install_V2.ps1" -Raw
           $cleanup = Get-Content "windows-app/current/Lumitool_Preinstall_Cleanup_V1.ps1" -Raw
           $launcher = Get-Content "windows-app/launcher/Lumitool_Printsever_Launcher.cs" -Raw
-          $iss = Get-Content "windows-app/installer/Lumitool_Printsever_V4_6.iss" -Raw
+          $iss = Get-Content "windows-app/installer/Lumitool_Printsever_V4_7.iss" -Raw
 
           $checks = @(
             @{ Name = "PrintUI queue configuration"; Text = "printui.dll,PrintUIEntry"; Source = $main },
             @{ Name = "PrintUI settings mode"; Text = '"/Xs"'; Source = $main },
             @{ Name = "Direct mode cleared"; Text = '"-direct"'; Source = $main },
             @{ Name = "Queued mode cleared"; Text = '"-queued"'; Source = $main },
-            @{ Name = "Clean queue recreation"; Text = "Remove-LumitoolTargetQueue"; Source = $main },
-            @{ Name = "Old port removed before recreate"; Text = "Remove-PrinterPort -Name $PortName"; Source = $main },
+            @{ Name = "Existing queue updated in place"; Text = "giữ queue và cập nhật driver/port"; Source = $main },
+            @{ Name = "Watcher paused during queue mutation"; Text = "Pause-LumitoolJobWatcher"; Source = $main },
+            @{ Name = "Watcher resumed after queue mutation"; Text = "Resume-LumitoolJobWatcher"; Source = $main },
+            @{ Name = "Printer name quoted for PrintUI"; Text = "$safeName"; Source = $main },
             @{ Name = "No native SetPrinter mutation"; Text = "SetFastSpoolMode"; Source = $main; MustBeAbsent = $true },
             @{ Name = "No V4.3 prncnfg queue path"; Text = "QUEUE/PRNCNFG"; Source = $main; MustBeAbsent = $true },
             @{ Name = "No bulk CIM printer mutation"; Text = "Set-CimInstance -InputObject $wmiPrinter"; Source = $main; MustBeAbsent = $true },
@@ -202,12 +204,12 @@ jobs:
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Path dist -Force | Out-Null
 
-          & "$env:ISCC" "windows-app\installer\Lumitool_Printsever_V4_6.iss"
+          & "$env:ISCC" "windows-app\installer\Lumitool_Printsever_V4_7.iss"
           if ($LASTEXITCODE -ne 0) {
             throw "Inno Setup failed with exit code $LASTEXITCODE"
           }
 
-          $exe = "dist\Lumitool_Printsever_Setup_V4_6.exe"
+          $exe = "dist\Lumitool_Printsever_Setup_V4_7.exe"
           if (-not (Test-Path $exe)) {
             throw "Installer EXE was not created"
           }
@@ -220,7 +222,7 @@ jobs:
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lumitool-Printsever-Setup-V4.6-EXE
-          path: dist/Lumitool_Printsever_Setup_V4_6.exe
+          name: Lumitool-Printsever-Setup-V4.7-EXE
+          path: dist/Lumitool_Printsever_Setup_V4_7.exe
           if-no-files-found: error
           retention-days: 30
