@@ -6,6 +6,8 @@ on:
     paths:
       - "windows-app/current/**"
       - "windows-app/installer/**"
+      - "windows-app/launcher/**"
+      - "windows-app/assets/**"
       - ".github/workflows/build-windows-installer.yml"
   workflow_dispatch:
 
@@ -23,15 +25,16 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           $required = @(
-            "windows-app/current/Lumitool_Printsever_Setup_V4_0.ps1",
+            "windows-app/current/Lumitool_Printsever_Setup_V4_1.ps1",
             "windows-app/current/Lumitool_Scan_Helper_V1.ps1",
             "windows-app/current/Lumitool_Job_Watcher_V2.ps1",
             "windows-app/current/Lumitool_OTA_Helper_V1.ps1",
             "windows-app/current/Lumitool_Preinstall_Cleanup_V1.ps1",
             "windows-app/current/Lumitool_Watcher_Install_V2.ps1",
-            "windows-app/current/Lumitool_Printsever_Launcher.cmd",
-            "windows-app/current/Lumitool_Printsever_Repair.cmd",
-            "windows-app/installer/Lumitool_Printsever_V4_0.iss"
+            "windows-app/launcher/Lumitool_Printsever_Launcher.cs",
+            "windows-app/launcher/Lumitool_Printsever_Launcher.manifest",
+            "windows-app/assets/Lumi3D_logo.png",
+            "windows-app/installer/Lumitool_Printsever_V4_1.iss"
           )
 
           foreach ($path in $required) {
@@ -66,33 +69,36 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V4_0.ps1" -Raw
+          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V4_1.ps1" -Raw
           $ota = Get-Content "windows-app/current/Lumitool_OTA_Helper_V1.ps1" -Raw
           $watcher = Get-Content "windows-app/current/Lumitool_Job_Watcher_V2.ps1" -Raw
           $watcherInstaller = Get-Content "windows-app/current/Lumitool_Watcher_Install_V2.ps1" -Raw
           $cleanup = Get-Content "windows-app/current/Lumitool_Preinstall_Cleanup_V1.ps1" -Raw
-          $iss = Get-Content "windows-app/installer/Lumitool_Printsever_V4_0.iss" -Raw
+          $launcher = Get-Content "windows-app/launcher/Lumitool_Printsever_Launcher.cs" -Raw
+          $iss = Get-Content "windows-app/installer/Lumitool_Printsever_V4_1.iss" -Raw
 
           $checks = @(
+            @{ Name = "Normal spooled queue"; Text = 'Queued              = $true'; Source = $main },
+            @{ Name = "Direct mode disabled"; Text = 'Direct              = $false'; Source = $main },
+            @{ Name = "Queue visibility verification"; Text = "Wait-PrinterVisible"; Source = $main },
+            @{ Name = "RAW endpoint verification"; Text = "Test-RawEndpoint"; Source = $main },
             @{ Name = "Main checks watcher task"; Text = "Test-LumitoolJobWatcher"; Source = $main },
             @{ Name = "Watcher reads ESP jobs API"; Text = "/api/jobs"; Source = $watcher },
             @{ Name = "Watcher clears completed Windows jobs"; Text = "Remove-PrintJob"; Source = $watcher },
-            @{ Name = "Installer includes main setup"; Text = "Lumitool_Printsever_Setup_V4_0.ps1"; Source = $iss },
-            @{ Name = "Installer includes watcher"; Text = "Lumitool_Job_Watcher_V2.ps1"; Source = $iss },
-            @{ Name = "Installer auto launches setup"; Text = "[Run]"; Source = $iss },
-            @{ Name = "OTA dialog"; Text = "Start-LumitoolOta"; Source = $main },
-            @{ Name = "OTA prepare"; Text = "/support/prepare"; Source = $ota },
-            @{ Name = "OTA upload"; Text = "/update"; Source = $ota },
             @{ Name = "Watcher auto discovery"; Text = "AUTO-DISCOVERY"; Source = $watcher },
             @{ Name = "Watcher fallback delete"; Text = "Win32_PrintJob.Delete"; Source = $watcher },
             @{ Name = "Watcher boot install"; Text = "Register-ScheduledTask"; Source = $watcherInstaller },
-            @{ Name = "Installer runs watcher setup"; Text = "Lumitool_Watcher_Install_V2.ps1"; Source = $iss },
-            @{ Name = "Clean install cleanup script"; Text = "Lumitool_Preinstall_Cleanup_V1.ps1"; Source = $iss },
+            @{ Name = "OTA dialog"; Text = "Start-LumitoolOta"; Source = $main },
+            @{ Name = "OTA prepare"; Text = "/support/prepare"; Source = $ota },
+            @{ Name = "OTA upload"; Text = "/update"; Source = $ota },
+            @{ Name = "Clean install cleanup"; Text = "Lumitool_Preinstall_Cleanup_V1.ps1"; Source = $iss },
             @{ Name = "Cleanup removes old queues"; Text = "Remove-Printer"; Source = $cleanup },
             @{ Name = "Cleanup removes old ports"; Text = "Remove-PrinterPort"; Source = $cleanup },
-            @{ Name = "Cleanup preserves vendor drivers"; Text = "Vendor printer drivers preserved"; Source = $cleanup },
-            @{ Name = "Installer wipes old app files"; Text = "[InstallDelete]"; Source = $iss },
-            @{ Name = "No prncnfg dependency"; Text = "Restart-Service -Name Spooler"; Source = $main; MustBeAbsent = $true }
+            @{ Name = "Cleanup preserves manufacturer drivers"; Text = "Vendor printer drivers preserved"; Source = $cleanup },
+            @{ Name = "Hidden WinExe launcher"; Text = "CreateNoWindow = true"; Source = $launcher },
+            @{ Name = "Installer uses EXE launcher"; Text = "Lumitool_Printsever.exe"; Source = $iss },
+            @{ Name = "Installer uses Lumi3D icon"; Text = "SetupIconFile=..\\build\\Lumi3D_logo.ico"; Source = $iss },
+            @{ Name = "No spooler restart"; Text = "Restart-Service -Name Spooler"; Source = $main; MustBeAbsent = $true }
           )
 
           foreach ($check in $checks) {
@@ -106,6 +112,55 @@ jobs:
               }
             }
             Write-Host "OK: $($check.Name)"
+          }
+
+      - name: Build Lumi3D icon
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Path "windows-app/build" -Force | Out-Null
+          python -m pip install pillow --quiet
+          @'
+          from PIL import Image
+          img = Image.open(r"windows-app/assets/Lumi3D_logo.png").convert("RGBA")
+          img.save(
+              r"windows-app/build/Lumi3D_logo.ico",
+              format="ICO",
+              sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
+          )
+          '@ | python -
+
+          if (-not (Test-Path "windows-app/build/Lumi3D_logo.ico")) {
+            throw "ICO generation failed"
+          }
+
+      - name: Build hidden Windows launcher
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $candidates = @(
+            "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
+            "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
+          )
+          $csc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $csc) { throw "csc.exe not found" }
+
+          $args = @(
+            "/nologo",
+            "/target:winexe",
+            "/optimize+",
+            "/reference:System.Windows.Forms.dll",
+            "/win32icon:windows-app\build\Lumi3D_logo.ico",
+            "/win32manifest:windows-app\launcher\Lumitool_Printsever_Launcher.manifest",
+            "/out:windows-app\build\Lumitool_Printsever.exe",
+            "windows-app\launcher\Lumitool_Printsever_Launcher.cs"
+          )
+
+          & $csc @args
+          if ($LASTEXITCODE -ne 0) { throw "Launcher compile failed" }
+          if (-not (Test-Path "windows-app/build/Lumitool_Printsever.exe")) {
+            throw "Launcher EXE missing"
           }
 
       - name: Install Inno Setup
@@ -130,7 +185,6 @@ jobs:
           }
 
           "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Using $iscc"
 
       - name: Build single EXE installer
         shell: powershell
@@ -138,12 +192,12 @@ jobs:
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Path dist -Force | Out-Null
 
-          & "$env:ISCC" "windows-app\installer\Lumitool_Printsever_V4_0.iss"
+          & "$env:ISCC" "windows-app\installer\Lumitool_Printsever_V4_1.iss"
           if ($LASTEXITCODE -ne 0) {
             throw "Inno Setup failed with exit code $LASTEXITCODE"
           }
 
-          $exe = "dist\Lumitool_Printsever_Setup_V4_0.exe"
+          $exe = "dist\Lumitool_Printsever_Setup_V4_1.exe"
           if (-not (Test-Path $exe)) {
             throw "Installer EXE was not created"
           }
@@ -151,14 +205,12 @@ jobs:
           $item = Get-Item $exe
           Write-Host ("Installer: " + $item.FullName)
           Write-Host ("Size: " + $item.Length + " bytes")
-
-          $sig = Get-AuthenticodeSignature $exe
-          Write-Host ("Authenticode: " + $sig.Status)
+          Write-Host ("Authenticode: " + (Get-AuthenticodeSignature $exe).Status)
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lumitool-Printsever-Setup-V4.0-EXE
-          path: dist/Lumitool_Printsever_Setup_V4_0.exe
+          name: Lumitool-Printsever-Setup-V4.1-EXE
+          path: dist/Lumitool_Printsever_Setup_V4_1.exe
           if-no-files-found: error
           retention-days: 30
