@@ -5,7 +5,7 @@ Public source repository for the Lumitool Printsever project.
 ## Current versions
 
 - Firmware: **V7.5** (`firmware/current/`)
-- Windows setup tool: **V3.2** (`windows-app/current/`)
+- Windows setup tool: **V3.3** (`windows-app/current/`)
 - MCU: ESP32-S2
 - USB printer mapping: A=`9101`, B=`9102`, C=`9103`
 
