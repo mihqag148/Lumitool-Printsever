@@ -418,8 +418,7 @@ try {
                 '([0-9A-Fa-f]{4})$'
             ) {
                 $id =
-                    $Matches[1].
-                    ToUpper()
+                    $Matches[1].ToUpper()
             }
 
             $keep = @()
@@ -541,8 +540,7 @@ try {
         $seen = @{}
 
         $payload =
-            [System.Text.Encoding]::ASCII.
-            GetBytes(
+            [System.Text.Encoding]::ASCII.GetBytes(
                 "LUMITOOL_DISCOVER_V1"
             )
 
@@ -569,15 +567,13 @@ try {
                     )
 
                 $localEp =
-                    New-Object
-                    System.Net.IPEndPoint(
+                    New-Object System.Net.IPEndPoint(
                         $localIp,
                         0
                     )
 
                 $udp =
-                    New-Object
-                    System.Net.Sockets.UdpClient
+                    New-Object System.Net.Sockets.UdpClient
 
                 $udp.EnableBroadcast =
                     $true
@@ -599,8 +595,7 @@ try {
                             )
 
                         $targetEp =
-                            New-Object
-                            System.Net.IPEndPoint(
+                            New-Object System.Net.IPEndPoint(
                                 $targetIp,
                                 4210
                             )
@@ -614,8 +609,7 @@ try {
                 }
 
                 $deadline =
-                    [DateTime]::UtcNow.
-                    AddMilliseconds(900)
+                    [DateTime]::UtcNow.AddMilliseconds(900)
 
                 while (
                     [DateTime]::UtcNow -lt
@@ -627,8 +621,7 @@ try {
                             0
                         ) {
                             $remote =
-                                New-Object
-                                System.Net.IPEndPoint(
+                                New-Object System.Net.IPEndPoint(
                                     [System.Net.IPAddress]::Any,
                                     0
                                 )
@@ -639,8 +632,7 @@ try {
                                 )
 
                             $json =
-                                [System.Text.Encoding]::UTF8.
-                                GetString($bytes)
+                                [System.Text.Encoding]::UTF8.GetString($bytes)
 
                             $o =
                                 $json |
@@ -837,8 +829,7 @@ try {
                 }
 
                 $c =
-                    New-Object
-                    System.Net.Sockets.TcpClient
+                    New-Object System.Net.Sockets.TcpClient
 
                 try {
                     $a =
@@ -911,8 +902,7 @@ try {
                 }
             }
 
-            [System.Windows.Forms.Application]::
-                DoEvents()
+            [System.Windows.Forms.Application]::DoEvents()
         }
 
         return @(
@@ -1319,8 +1309,7 @@ try {
             '([0-9A-Fa-f]{4})$'
         ) {
             $suffix =
-                $Matches[1].
-                ToUpper()
+                $Matches[1].ToUpper()
         }
 
         $defaultName =
@@ -1361,8 +1350,7 @@ try {
                 $Letter +
                 "..."
 
-            [System.Windows.Forms.Application]::
-                DoEvents()
+            [System.Windows.Forms.Application]::DoEvents()
 
             UiLog(
                 "CÀI " +
@@ -1488,8 +1476,7 @@ try {
                 "Cài printer lỗi"
 
             $line =
-                $_.InvocationInfo.
-                ScriptLineNumber
+                $_.InvocationInfo.ScriptLineNumber
 
             UiLog(
                 "CÀI PRINTER LỖI line=" +
