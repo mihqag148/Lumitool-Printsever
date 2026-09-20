@@ -86,7 +86,7 @@ jobs:
             @{ Name = "Watcher paused during queue mutation"; Text = "Pause-LumitoolJobWatcher"; Source = $main },
             @{ Name = "Watcher resumed after queue mutation"; Text = "Resume-LumitoolJobWatcher"; Source = $main },
             @{ Name = "Printer name quoted for PrintUI"; Text = '$safeName'; Source = $main },
-            @{ Name = "PrintUI bounded timeout"; Text = "timeout sau 6 giây"; Source = $main },
+            @{ Name = "PrintUI bounded timeout"; Text = "V48_PRINTUI_TIMEOUT_6S"; Source = $main },
             @{ Name = "PrintUI keeps UI responsive"; Text = '[System.Windows.Forms.Application]::DoEvents()'; Source = $main },
             @{ Name = "No synchronous raw Set-Printer"; Text = 'Set-Printer -Name $PrinterName -KeepPrintedJobs'; Source = $main; MustBeAbsent = $true },
             @{ Name = "No native SetPrinter mutation"; Text = "SetFastSpoolMode"; Source = $main; MustBeAbsent = $true },
