@@ -79,13 +79,13 @@ jobs:
 
           $checks = @(
             @{ Name = "PrintUI queue configuration"; Text = "printui.dll,PrintUIEntry"; Source = $main },
-            @{ Name = "PrintUI settings mode"; Text = '"/Xs"'; Source = $main },
+            @{ Name = "PrintUI settings mode"; Text = "/Xs"; Source = $main },
             @{ Name = "Direct mode cleared"; Text = '"-direct"'; Source = $main },
             @{ Name = "Queued mode cleared"; Text = '"-queued"'; Source = $main },
             @{ Name = "Existing queue updated in place"; Text = "giữ queue và cập nhật driver/port"; Source = $main },
             @{ Name = "Watcher paused during queue mutation"; Text = "Pause-LumitoolJobWatcher"; Source = $main },
             @{ Name = "Watcher resumed after queue mutation"; Text = "Resume-LumitoolJobWatcher"; Source = $main },
-            @{ Name = "Printer name quoted for PrintUI"; Text = "$safeName"; Source = $main },
+            @{ Name = "Printer name quoted for PrintUI"; Text = '$safeName'; Source = $main },
             @{ Name = "No native SetPrinter mutation"; Text = "SetFastSpoolMode"; Source = $main; MustBeAbsent = $true },
             @{ Name = "No V4.3 prncnfg queue path"; Text = "QUEUE/PRNCNFG"; Source = $main; MustBeAbsent = $true },
             @{ Name = "No bulk CIM printer mutation"; Text = "Set-CimInstance -InputObject $wmiPrinter"; Source = $main; MustBeAbsent = $true },
