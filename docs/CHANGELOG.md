@@ -8,7 +8,7 @@
 - V7.2: compact web UI.
 - V7.3: BOOT long-press actions and web OTA support.
 - V7.4: Lumitool branding and stronger LAN discovery identity.
-- V7.5: device name `Lumitool-Printsever-XXXX`, suffix from Wi-Fi STA MAC, hostname configured before Wi-Fi starts.
+- V7.6: device name `Lumitool-Printsever-XXXX`, suffix from Wi-Fi STA MAC, hostname configured before Wi-Fi starts.
 
 ## Windows setup
 
@@ -18,4 +18,4 @@
 - V2.2: discovery type compatibility fix.
 - V3: Lumitool naming and firmware identity/discovery integration.
 - V3.1: expanded local-network discovery.
-- V3.3: Standard TCP/IP port creation fix; removed invalid SNMP=0 usage and added `prnport.vbs` fallback.
+- V3.4: Standard TCP/IP port creation fix; removed invalid SNMP=0 usage and added `prnport.vbs` fallback.
