@@ -71,7 +71,7 @@ internal static class Program
                 return;
             }
 
-            string script = Path.Combine(baseDir, "Lumitool_Printsever_Setup_V4_4.ps1");
+            string script = Path.Combine(baseDir, "Lumitool_Printsever_Setup_V4_5.ps1");
 
             if (!File.Exists(script))
             {
@@ -112,7 +112,7 @@ internal static class Program
                 if (p.ExitCode != 0)
                 {
                     MessageBox.Show(
-                        "Lumitool Printsever gặp lỗi.\r\n\r\nLog: %TEMP%\\Lumitool_Printsever_Setup_V4_4.log",
+                        "Lumitool Printsever gặp lỗi.\r\n\r\nLog: %TEMP%\\Lumitool_Printsever_Setup_V4_5.log",
                         "Lumitool Printsever",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Error
