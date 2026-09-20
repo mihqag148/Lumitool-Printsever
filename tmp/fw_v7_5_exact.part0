@@ -1,0 +1,768 @@
+/*
+  LUMITOOL PRINTSEVER V7.5 - DISCOVERY + OTA + 3 PRINTER QUEUES
+  Target: ESP32-S2 + USB 2.0 hub + USB Printer Class printers
+
+  NETWORK
+    Printer A -> RAW TCP 9101
+    Printer B -> RAW TCP 9102
+    Printer C -> RAW TCP 9103
+
+  USB
+    Direct printer (no hub) -> Printer A / TCP 9101
+    Hub physical port 1     -> Printer A / TCP 9101
+    Hub physical port 2     -> Printer B / TCP 9102
+    Hub physical port 3     -> Printer C / TCP 9103
+
+  WEB
+    Setup AP : Lumitool-Printsever-XXXX
+    Setup IP : 192.168.10.1
+    Local    : http://lumitool-printsever-xxxx.local
+    /jobs    : live per-printer queue + job history
+    /log     : live system log
+    /log.txt : download log
+
+  WINDOWS RAW FEEDBACK
+    - The TCP connection stays open while a job waits in this server's queue.
+    - The TCP connection is closed only after the job data has been transferred
+      successfully to the target USB printer.
+    - Therefore Windows normally keeps the job as Printing until this server
+      actually finishes forwarding it.
+    - RAW 9100 cannot expose this server's exact queue position/job list back
+      to standard Windows Spooler. The web /jobs page is the authoritative queue.
+    - Full Windows "paper out/offline" feedback is driver/printer dependent.
+      V7 reads USB Printer Class GET_PORT_STATUS for the web UI when supported.
+
+  JOB QUEUE
+    - Up to 3 simultaneous jobs per printer: 1 active + 2 waiting/receiving.
+    - Incoming jobs are buffered in PSRAM, then printed FIFO.
+    - A, B and C are independent: all three printers can print concurrently.
+    - Global queue RAM budget is limited to avoid crashes.
+
+  V7.1 COMPILE FIX
+    - Adds forward declarations for JobState / PrintJob / PrinterSlot before
+      the first function body. This prevents Arduino's auto-prototype generator
+      from producing prototypes before those custom types are known.
+
+  IMPORTANT
+    Keep the SAME build_opt.h from V6 in this sketch folder:
+      -DESP_USB_HOST_MAX_DEVICES=4
+
+    Arduino Tools:
+      USB CDC On Boot = Disabled
+
+  HARDWARE
+    ESP32-S2 USB-C -> USB-C OTG -> USB 2.0 hub
+    ESP32-S2 power -> VBUS + GND
+    GPIO15 -> onboard status LED
+
+  LED GPIO15
+    solid ON              = normal
+    slow blink            = no home Wi-Fi
+    2 quick blinks/pause  = USB/printer runtime error
+*/
+
+#include <Arduino.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
+#include <ESPmDNS.h>
+#include <WebServer.h>
+#include <DNSServer.h>
+#include <Preferences.h>
+#include "EspUsbHost.h"
+#include "esp_heap_caps.h"
+#include <Update.h>
+#include "esp_system.h"
+#include "esp_mac.h"
+#include "esp_ota_ops.h"
+
+// ============================================================
+// General
+// ============================================================
+static const uint8_t LED_PIN = 15;
+static const bool LED_ACTIVE_LOW = false;
+
+static const uint8_t BOOT_BUTTON_PIN = 0;
+static const uint32_t BOOT_RESTART_MS = 3000;
+static const uint32_t BOOT_WIFI_RESET_MS = 10000;
+
+static const uint32_t JOB_RX_IDLE_MS = 2200;
+static const uint32_t EMPTY_CLIENT_TIMEOUT_MS = 5000;
+static const uint32_t PRINTER_STATUS_POLL_MS = 1500;
+
+static const uint8_t MAX_JOBS_PER_PRINTER = 3;  // active + 2 waiting
+static const size_t USB_SEND_CHUNK = 4096;
+
+// Queue memory limits.
+// Board from earlier upload: ESP32-S2FNR2 with 2 MB embedded PSRAM.
+static const size_t PSRAM_JOB_MAX_BYTES = 512UL * 1024UL;
+static const size_t PSRAM_TOTAL_QUEUE_BYTES = 1400UL * 1024UL;
+static const size_t DRAM_JOB_MAX_BYTES = 64UL * 1024UL;
+static const size_t DRAM_TOTAL_QUEUE_BYTES = 160UL * 1024UL;
+
+IPAddress AP_IP(192, 168, 10, 1);
+IPAddress AP_GW(192, 168, 10, 1);
+IPAddress AP_MASK(255, 255, 255, 0);
+
+static const uint16_t DISCOVERY_PORT = 4210;
+static const char *DISCOVERY_MAGIC = "LUMITOOL_DISCOVER_V1";
+static const char *PRODUCT_MAGIC = "LUMITOOL_PRINTSEVER";
+
+WiFiUDP discoveryUdp;
+bool discoveryStarted = false;
+
+String macSuffix;
+String apSsid;
+String hostName;
+String localUrl;
+String supportPassword;
+String stationMacText;
+
+// ============================================================
+// Storage / network
+// ============================================================
+Preferences prefs;
+String savedSsid;
+String savedPass;
+
+WebServer web(80);
+DNSServer dns;
+
+WiFiServer serverA(9101);
+WiFiServer serverB(9102);
+WiFiServer serverC(9103);
+
+bool tcpStarted = false;
+bool mdnsStarted = false;
+uint32_t lastWifiAttempt = 0;
+
+// ============================================================
+// USB
+// ============================================================
+EspUsbHost usb;
+bool usbDeviceChanged = false;
+bool fatalUsbHostError = false;
+String globalLastError = "None";
+
+// ============================================================
+// Remote support / OTA
+// ============================================================
+bool otaMaintenanceRequested = false;
+bool otaReady = false;
+bool otaUploading = false;
+bool otaUploadSuccess = false;
+bool otaUploadAuthorized = false;
+bool otaUploadStarted = false;
+
+String otaStatusMessage = "Sẵn sàng";
+String otaFileName = "";
+
+size_t otaBytesWritten = 0;
+uint32_t otaRestartAt = 0;
+
+// ============================================================
+// Logging
+// ============================================================
+static const size_t LOG_MAX_CHARS = 22000;
+String systemLog;
+
+// ============================================================
+// Arduino .ino preprocessor compatibility
+// ============================================================
+// Arduino auto-generates function prototypes before the first function body.
+// These forward declarations make the custom types visible to those prototypes.
+enum JobState : uint8_t;
+struct PrintJob;
+struct JobHistory;
+struct PrinterSlot;
+
+String formatBytes(uint64_t bytes);
+extern size_t totalQueueAllocated;
+
+String uptimeStamp() {
+  uint32_t ms = millis();
+  uint32_t sec = ms / 1000UL;
+  uint32_t h = sec / 3600UL;
+  uint32_t m = (sec % 3600UL) / 60UL;
+  uint32_t s = sec % 60UL;
+  uint32_t milli = ms % 1000UL;
+
+  char b[28];
+  snprintf(b, sizeof(b), "[%03lu:%02lu:%02lu.%03lu] ",
+           (unsigned long)h,
+           (unsigned long)m,
+           (unsigned long)s,
+           (unsigned long)milli);
+  return String(b);
+}
+
+void addLog(const String &msg) {
+  String line = uptimeStamp() + msg + "\n";
+  systemLog += line;
+
+  if (systemLog.length() > LOG_MAX_CHARS) {
+    size_t target = systemLog.length() - (LOG_MAX_CHARS * 3 / 4);
+    int cut = systemLog.indexOf('\n', (unsigned int)target);
+    if (cut >= 0) systemLog.remove(0, cut + 1);
+    else systemLog.remove(0, target);
+  }
+
+  Serial.print(line);
+}
+
+void setGlobalError(const String &msg) {
+  if (globalLastError == msg) return;
+  globalLastError = msg;
+
+  if (msg == "None") addLog("Global error cleared");
+  else addLog("ERROR: " + msg);
+}
+
+
+String resetReasonText(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_POWERON:   return "POWERON";
+    case ESP_RST_EXT:       return "EXT_RESET";
+    case ESP_RST_SW:        return "SOFTWARE";
+    case ESP_RST_PANIC:     return "PANIC";
+    case ESP_RST_INT_WDT:   return "INT_WDT";
+    case ESP_RST_TASK_WDT:  return "TASK_WDT";
+    case ESP_RST_WDT:       return "WDT";
+    case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
+    case ESP_RST_BROWNOUT:  return "BROWNOUT";
+    case ESP_RST_SDIO:      return "SDIO";
+    default:                return "UNKNOWN";
+  }
+}
+
+String jsonEscape(const String &s) {
+  String o;
+  o.reserve(s.length() + 8);
+
+  for (size_t i = 0; i < s.length(); i++) {
+    char c = s[i];
+
+    if (c == '\\' || c == '"') {
+      o += '\\';
+      o += c;
+    } else if (c == '\n') {
+      o += "\\n";
+    } else if (c == '\r') {
+      o += "\\r";
+    } else {
+      o += c;
+    }
+  }
+
+  return o;
+}
+
+String currentOtaPartitionLabel() {
+  const esp_partition_t *p =
+    esp_ota_get_running_partition();
+
+  return p
+    ? String(p->label)
+    : String("-");
+}
+
+String nextOtaPartitionInfo() {
+  const esp_partition_t *p =
+    esp_ota_get_next_update_partition(nullptr);
+
+  if (!p) {
+    return "KHÔNG CÓ OTA SLOT";
+  }
+
+  return String(p->label) +
+         " / " +
+         formatBytes(p->size);
+}
+
+void logSystemSnapshot(const String &tag) {
+  String s = tag;
+
+  s += " | Heap free=";
+  s += formatBytes(ESP.getFreeHeap());
+
+  s += " min=";
+  s += formatBytes(ESP.getMinFreeHeap());
+
+  s += " | PSRAM free=";
+  s += formatBytes(ESP.getFreePsram());
+
+  s += "/";
+  s += formatBytes(ESP.getPsramSize());
+
+  s += " | Queue=";
+  s += formatBytes(totalQueueAllocated);
+
+  s += " | WiFi=";
+
+  if (WiFi.status() == WL_CONNECTED) {
+    s += WiFi.localIP().toString();
+    s += " RSSI=";
+    s += String(WiFi.RSSI());
+  } else {
+    s += "OFF";
+  }
+
+  addLog(s);
+}
+
+bool supportAuth() {
+  if (
+    web.authenticate(
+      "admin",
+      supportPassword.c_str()
+    )
+  ) {
+    return true;
+  }
+
+  web.requestAuthentication();
+  return false;
+}
+
+// ============================================================
+// Jobs / queue
+// ============================================================
+enum JobState : uint8_t {
+  JOB_FREE = 0,
+  JOB_RECEIVING,
+  JOB_QUEUED,
+  JOB_PRINTING
+};
+
+struct PrintJob {
+  JobState state;
+  uint32_t id;
+  WiFiClient client;
+  IPAddress sourceIp;
+
+  uint8_t *data;
+  size_t length;
+  size_t capacity;
+  size_t sent;
+  bool inPsram;
+
+  uint32_t createdMs;
+  uint32_t firstByteMs;
+  uint32_t lastActivityMs;
+};
+
+struct JobHistory {
+  uint32_t id;
+  char printer;
+  IPAddress sourceIp;
+  uint32_t bytes;
+  uint32_t durationMs;
+  uint32_t finishedMs;
+  bool success;
+  String result;
+};
+
+static const uint8_t HISTORY_COUNT = 18;
+JobHistory historyItems[HISTORY_COUNT];
+uint8_t historyWriteIndex = 0;
+uint32_t nextJobId = 1;
+
+size_t totalQueueAllocated = 0;
+
+// ============================================================
+// Printer slots
+// ============================================================
+struct PrinterSlot {
+  char label;
+  uint8_t hubPort;
+  uint16_t tcpPort;
+  WiFiServer *server;
+
+  bool ready;
+  bool runtimeError;
+
+  uint8_t address;
+  uint8_t interfaceNumber;
+  uint8_t protocol;
+  uint8_t portId;
+  uint8_t parentAddress;
+
+  uint16_t vid;
+  uint16_t pid;
+  String product;
+  String manufacturer;
+  String lastError;
+
+  // USB Printer Class GET_PORT_STATUS
+  bool portStatusSupported;
+  uint8_t portStatusByte;
+  bool paperEmpty;
+  bool selected;
+  bool noError;
+  uint32_t lastStatusPollMs;
+
+  PrintJob jobs[MAX_JOBS_PER_PRINTER];
+
+  uint32_t jobsAccepted;
+  uint32_t jobsDone;
+  uint32_t jobsFailed;
+  uint64_t bytesPrinted;
+};
+
+PrinterSlot printers[3];
+
+uint8_t netBuffer[2048];
+
+// ============================================================
+// Small helpers
+// ============================================================
+String htmlEscape(const String &s) {
+  String out;
+  out.reserve(s.length() + 16);
+
+  for (size_t i = 0; i < s.length(); i++) {
+    char c = s[i];
+    if (c == '&') out += F("&amp;");
+    else if (c == '<') out += F("&lt;");
+    else if (c == '>') out += F("&gt;");
+    else if (c == '"') out += F("&quot;");
+    else out += c;
+  }
+
+  return out;
+}
+
+String formatBytes(uint64_t bytes) {
+  if (bytes >= 1024ULL * 1024ULL) {
+    return String((double)bytes / (1024.0 * 1024.0), 1) + " MB";
+  }
+  if (bytes >= 1024ULL) {
+    return String((double)bytes / 1024.0, 1) + " KB";
+  }
+  return String((unsigned long)bytes) + " B";
+}
+
+String jobStateText(JobState s) {
+  switch (s) {
+    case JOB_RECEIVING: return "ĐANG NHẬN";
+    case JOB_QUEUED:    return "ĐANG CHỜ";
+    case JOB_PRINTING:  return "ĐANG IN";
+    default:            return "-";
+  }
+}
+
+size_t runtimeJobLimit() {
+  return psramFound() ? PSRAM_JOB_MAX_BYTES : DRAM_JOB_MAX_BYTES;
+}
+
+size_t runtimeTotalQueueLimit() {
+  return psramFound() ? PSRAM_TOTAL_QUEUE_BYTES : DRAM_TOTAL_QUEUE_BYTES;
+}
+
+void freeJobBuffer(PrintJob &j) {
+  if (j.data) {
+    if (j.inPsram) heap_caps_free(j.data);
+    else free(j.data);
+
+    if (totalQueueAllocated >= j.capacity) totalQueueAllocated -= j.capacity;
+    else totalQueueAllocated = 0;
+  }
+
+  j.data = nullptr;
+  j.capacity = 0;
+  j.length = 0;
+  j.sent = 0;
+  j.inPsram = false;
+}
+
+void resetJob(PrintJob &j) {
+  if (j.client) j.client.stop();
+  freeJobBuffer(j);
+
+  j.state = JOB_FREE;
+  j.id = 0;
+  j.sourceIp = IPAddress();
+  j.createdMs = 0;
+  j.firstByteMs = 0;
+  j.lastActivityMs = 0;
+}
+
+bool ensureJobCapacity(PrintJob &j, size_t required) {
+  if (required <= j.capacity) return true;
+
+  size_t jobLimit = runtimeJobLimit();
+  size_t totalLimit = runtimeTotalQueueLimit();
+
+  if (required > jobLimit) return false;
+
+  size_t newCap = j.capacity ? j.capacity : 4096;
+  while (newCap < required) {
+    size_t next = newCap * 2;
+    if (next > jobLimit) next = jobLimit;
+    if (next == newCap) break;
+    newCap = next;
+  }
+
+  if (newCap < required) return false;
+
+  size_t projected =
+    totalQueueAllocated - j.capacity + newCap;
+
+  if (projected > totalLimit) return false;
+
+  void *newPtr = nullptr;
+
+  if (psramFound()) {
+    if (j.data) {
+      newPtr = heap_caps_realloc(
+        j.data,
+        newCap,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
+      );
+    } else {
+      newPtr = heap_caps_malloc(
+        newCap,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
+      );
+    }
+  } else {
+    if (j.data) newPtr = realloc(j.data, newCap);
+    else newPtr = malloc(newCap);
+  }
+
+  if (!newPtr) {
+    addLog(
+      "MEMORY ALLOC FAIL required=" +
+      formatBytes(required) +
+      " newCap=" +
+      formatBytes(newCap) +
+      " heapFree=" +
+      formatBytes(ESP.getFreeHeap()) +
+      " psramFree=" +
+      formatBytes(ESP.getFreePsram())
+    );
+
+    return false;
+  }
+
+  totalQueueAllocated = projected;
+  j.data = (uint8_t *)newPtr;
+  j.capacity = newCap;
+  j.inPsram = psramFound();
+
+  return true;
+}
+
+void addHistory(const PrintJob &j,
+                const PrinterSlot &p,
+                bool success,
+                const String &result) {
+  JobHistory &h = historyItems[historyWriteIndex];
+
+  h.id = j.id;
+  h.printer = p.label;
+  h.sourceIp = j.sourceIp;
+  h.bytes = (uint32_t)j.length;
+  h.durationMs = millis() - j.createdMs;
+  h.finishedMs = millis();
+  h.success = success;
+  h.result = result;
+
+  historyWriteIndex = (historyWriteIndex + 1) % HISTORY_COUNT;
+}
+
+void finishJob(PrinterSlot &p,
+               PrintJob &j,
+               bool success,
+               const String &result) {
+  addHistory(j, p, success, result);
+
+  if (success) {
+    p.jobsDone++;
+    p.bytesPrinted += j.length;
+
+    addLog(
+      "Printer " + String(p.label) +
+      " job #" + String(j.id) +
+      " DONE " + String((unsigned long)j.length) +
+      " bytes from " + j.sourceIp.toString()
+    );
+  } else {
+    p.jobsFailed++;
+
+    addLog(
+      "Printer " + String(p.label) +
+      " job #" + String(j.id) +
+      " ERROR: " + result
+    );
+  }
+
+  // This close is the completion signal Windows RAW spooler sees.
+  if (j.client) {
+    j.client.flush();
+    delay(2);
+    j.client.stop();
+  }
+
+  resetJob(j);
+}
+
+PrintJob* findFreeJob(PrinterSlot &p) {
+  for (uint8_t i = 0; i < MAX_JOBS_PER_PRINTER; i++) {
+    if (p.jobs[i].state == JOB_FREE) return &p.jobs[i];
+  }
+  return nullptr;
+}
+
+PrintJob* findOldestQueuedJob(PrinterSlot &p) {
+  PrintJob *best = nullptr;
+
+  for (uint8_t i = 0; i < MAX_JOBS_PER_PRINTER; i++) {
+    PrintJob &j = p.jobs[i];
+
+    if (j.state != JOB_QUEUED) continue;
+
+    if (!best || j.id < best->id) best = &j;
+  }
+
+  return best;
+}
+
+PrintJob* findPrintingJob(PrinterSlot &p) {
+  for (uint8_t i = 0; i < MAX_JOBS_PER_PRINTER; i++) {
+    if (p.jobs[i].state == JOB_PRINTING) return &p.jobs[i];
+  }
+  return nullptr;
+}
+
+uint8_t countJobs(const PrinterSlot &p, JobState state) {
+  uint8_t n = 0;
+
+  for (uint8_t i = 0; i < MAX_JOBS_PER_PRINTER; i++) {
+    if (p.jobs[i].state == state) n++;
+  }
+
+  return n;
+}
+
+uint8_t countAllJobs(const PrinterSlot &p) {
+  uint8_t n = 0;
+
+  for (uint8_t i = 0; i < MAX_JOBS_PER_PRINTER; i++) {
+    if (p.jobs[i].state != JOB_FREE) n++;
+  }
+
+  return n;
+}
+
+
+bool allPrintJobsEmpty() {
+  for (uint8_t i = 0; i < 3; i++) {
+    if (
+      countAllJobs(
+        printers[i]
+      ) != 0
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void rejectIncomingClient(
+  PrinterSlot &p
+) {
+  if (!p.server) {
+    return;
+  }
+
+  WiFiClient c =
+    p.server->available();
+
+  if (c) {
+    addLog(
+      "Printer " +
+      String(p.label) +
+      " rejected client during OTA maintenance: " +
+      c.remoteIP().toString()
+    );
+
+    c.stop();
+  }
+}
+
+// ============================================================
+// Init printers / identity
+// ============================================================
+void initPrinterSlots() {
+  printers[0].label = 'A';
+  printers[0].hubPort = 1;
+  printers[0].tcpPort = 9101;
+  printers[0].server = &serverA;
+
+  printers[1].label = 'B';
+  printers[1].hubPort = 2;
+  printers[1].tcpPort = 9102;
+  printers[1].server = &serverB;
+
+  printers[2].label = 'C';
+  printers[2].hubPort = 3;
+  printers[2].tcpPort = 9103;
+  printers[2].server = &serverC;
+
+  for (uint8_t i = 0; i < 3; i++) {
+    PrinterSlot &p = printers[i];
+
+    p.ready = false;
+    p.runtimeError = false;
+
+    p.address = 0;
+    p.interfaceNumber = 0xFF;
+    p.protocol = 0;
+    p.portId = 0;
+    p.parentAddress = 0;
+
+    p.vid = 0;
+    p.pid = 0;
+    p.product = "";
+    p.manufacturer = "";
+    p.lastError = "None";
+
+    p.portStatusSupported = false;
+    p.portStatusByte = 0;
+    p.paperEmpty = false;
+    p.selected = true;
+    p.noError = true;
+    p.lastStatusPollMs = 0;
+
+    p.jobsAccepted = 0;
+    p.jobsDone = 0;
+    p.jobsFailed = 0;
+    p.bytesPrinted = 0;
+
+    for (uint8_t j = 0; j < MAX_JOBS_PER_PRINTER; j++) {
+      p.jobs[j].data = nullptr;
+      p.jobs[j].capacity = 0;
+      p.jobs[j].inPsram = false;
+      p.jobs[j].state = JOB_FREE;
+      resetJob(p.jobs[j]);
+    }
+  }
+
+  for (uint8_t i = 0; i < HISTORY_COUNT; i++) {
+    historyItems[i].id = 0;
+  }
+}
+
+void buildIdentity() {
+  uint8_t staMac[6] = {
+    0, 0, 0, 0, 0, 0
+  };
+
+  bool macOk =
+    esp_read_mac(
+      staMac,
+      ESP_MAC_WIFI_STA
+    ) == ESP_OK;
+
+  char suff
