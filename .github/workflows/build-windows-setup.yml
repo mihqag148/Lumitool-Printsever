@@ -21,9 +21,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $required = @(
-            "windows-app/current/Lumitool_Printsever_Setup_V3_3.ps1",
+            "windows-app/current/Lumitool_Printsever_Setup_V3_4.ps1",
             "windows-app/current/Lumitool_Scan_Helper_V1.ps1",
-            "windows-app/current/CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_3.cmd"
+            "windows-app/current/CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_4.cmd"
           )
 
           foreach ($path in $required) {
@@ -57,7 +57,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V3_3.ps1" -Raw
+          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V3_4.ps1" -Raw
           $helper = Get-Content "windows-app/current/Lumitool_Scan_Helper_V1.ps1" -Raw
 
           $checks = @(
@@ -83,27 +83,27 @@ jobs:
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           New-Item -ItemType Directory -Path package -Force | Out-Null
 
-          Copy-Item "windows-app/current/Lumitool_Printsever_Setup_V3_3.ps1" package/
+          Copy-Item "windows-app/current/Lumitool_Printsever_Setup_V3_4.ps1" package/
           Copy-Item "windows-app/current/Lumitool_Scan_Helper_V1.ps1" package/
-          Copy-Item "windows-app/current/CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_3.cmd" package/
+          Copy-Item "windows-app/current/CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_4.cmd" package/
 
           @"
-          Lumitool Printsever Windows Setup V3.3
+          Lumitool Printsever Windows Setup V3.4
 
           1. Giai nen ZIP.
-          2. Chay CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_3.cmd.
+          2. Chay CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_4.cmd.
           3. Quet thiet bi chay nen, giao dien khong bi dung/treo.
           4. Co nut HUY de dung quet.
           5. Chon driver may in da cai tren Windows.
           6. Cai Printer A/B/C tuong ung RAW 9101/9102/9103.
           "@ | Set-Content package/README.txt -Encoding UTF8
 
-          Compress-Archive -Path package/* -DestinationPath "dist/Lumitool_Printsever_Windows_Setup_V3_3.zip" -Force
+          Compress-Archive -Path package/* -DestinationPath "dist/Lumitool_Printsever_Windows_Setup_V3_4.zip" -Force
 
       - name: Upload Windows setup artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lumitool-Printsever-Windows-Setup-V3.3
-          path: dist/Lumitool_Printsever_Windows_Setup_V3_3.zip
+          name: Lumitool-Printsever-Windows-Setup-V3.4
+          path: dist/Lumitool_Printsever_Windows_Setup_V3_4.zip
           if-no-files-found: error
           retention-days: 30
