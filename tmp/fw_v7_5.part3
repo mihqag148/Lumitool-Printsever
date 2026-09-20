@@ -1,0 +1,986 @@
+</div>";
+
+  p += "<div class='kv'>Heap free<br><b>";
+  p += formatBytes(
+    ESP.getFreeHeap()
+  );
+  p += "</b></div>";
+
+  p += "<div class='kv'>PSRAM free<br><b>";
+  p += formatBytes(
+    ESP.getFreePsram()
+  );
+  p += " / ";
+  p += formatBytes(
+    ESP.getPsramSize()
+  );
+  p += "</b></div>";
+
+  p += "</div></div>";
+
+  p += F(
+    "<div class='c'><h2>Chế độ hỗ trợ</h2>"
+    "<div id='state' class='small'>Đang đọc...</div>"
+    "<button onclick=\"cmd('/support/prepare')\">Chuẩn bị nạp firmware</button>"
+    "<button class='ghost' onclick=\"cmd('/support/cancel')\">Thoát chế độ nạp</button>"
+    "</div>"
+
+    "<div class='c'><h2>Nạp firmware .bin</h2>"
+    "<input id='fw' type='file' accept='.bin,application/octet-stream'>"
+    "<button id='up' onclick='uploadFw()'>NẠP FIRMWARE</button>"
+    "<div class='bar'><div id='fill' class='fill'></div></div>"
+    "<div id='pct' class='small' style='margin-top:6px'>0%</div>"
+    "<div class='small'>Server dừng nhận job mới khi chuẩn bị OTA. Job đang có sẽ chạy xong trước.</div>"
+    "</div>"
+
+    "<div class='c'>"
+    "<a class='btn ghost' href='/'>Trang chính</a>"
+    "<a class='btn ghost' href='/log'>Log</a>"
+    "</div>"
+
+    "<script>"
+    "async function load(){"
+      "try{"
+        "let r=await fetch('/support/status');"
+        "let j=await r.json();"
+        "document.getElementById('state').innerHTML="
+        "'Trạng thái: <b>'+j.message+'</b><br>Job còn lại: '+j.jobs+'<br>OTA ready: '+(j.ready?'YES':'NO')+'<br>Bytes: '+j.bytes;"
+        "document.getElementById('up').disabled=!j.ready||j.uploading;"
+      "}catch(e){"
+        "document.getElementById('state').textContent='Mất kết nối';"
+      "}"
+    "}"
+
+    "async function cmd(u){"
+      "try{await fetch(u,{method:'POST'});}catch(e){}"
+      "setTimeout(load,250);"
+    "}"
+
+    "function uploadFw(){"
+      "let f=document.getElementById('fw').files[0];"
+      "if(!f){alert('Chọn file .bin trước');return;}"
+      "let fd=new FormData();"
+      "fd.append('firmware',f,f.name);"
+      "let x=new XMLHttpRequest();"
+      "x.open('POST','/update');"
+      "x.upload.onprogress=function(e){"
+        "if(e.lengthComputable){"
+          "let n=Math.round(e.loaded*100/e.total);"
+          "document.getElementById('fill').style.width=n+'%';"
+          "document.getElementById('pct').textContent=n+'%';"
+        "}"
+      "};"
+      "x.onload=function(){"
+        "document.getElementById('pct').textContent=x.responseText;"
+        "setTimeout(load,500);"
+      "};"
+      "x.onerror=function(){"
+        "document.getElementById('pct').textContent='Upload error';"
+      "};"
+      "x.send(fd);"
+    "}"
+
+    "load();setInterval(load,1000);"
+    "</script></div></body></html>"
+  );
+
+  return p;
+}
+
+void handleSupportPage() {
+  if (!supportAuth()) {
+    return;
+  }
+
+  web.send(
+    200,
+    "text/html; charset=utf-8",
+    makeSupportPage()
+  );
+}
+
+void handleSupportStatus() {
+  if (!supportAuth()) {
+    return;
+  }
+
+  uint8_t jobs =
+    countAllJobs(printers[0]) +
+    countAllJobs(printers[1]) +
+    countAllJobs(printers[2]);
+
+  String j = "{";
+
+  j += "\"requested\":";
+  j += otaMaintenanceRequested
+    ? "true"
+    : "false";
+
+  j += ",\"ready\":";
+  j += otaReady
+    ? "true"
+    : "false";
+
+  j += ",\"uploading\":";
+  j += otaUploading
+    ? "true"
+    : "false";
+
+  j += ",\"success\":";
+  j += otaUploadSuccess
+    ? "true"
+    : "false";
+
+  j += ",\"jobs\":";
+  j += String(jobs);
+
+  j += ",\"bytes\":";
+  j += String(
+    (unsigned long)otaBytesWritten
+  );
+
+  j += ",\"message\":\"";
+  j += jsonEscape(
+    otaStatusMessage
+  );
+  j += "\"}";
+
+  web.send(
+    200,
+    "application/json; charset=utf-8",
+    j
+  );
+}
+
+void handleSupportPrepare() {
+  if (!supportAuth()) {
+    return;
+  }
+
+  otaMaintenanceRequested = true;
+  otaReady = allPrintJobsEmpty();
+
+  if (otaReady) {
+    otaStatusMessage =
+      "Sẵn sàng nhận firmware";
+  } else {
+    otaStatusMessage =
+      "Đang chờ job hiện tại hoàn tất";
+  }
+
+  addLog(
+    "OTA maintenance requested from web"
+  );
+
+  web.send(
+    200,
+    "text/plain; charset=utf-8",
+    otaStatusMessage
+  );
+}
+
+void handleSupportCancel() {
+  if (!supportAuth()) {
+    return;
+  }
+
+  if (otaUploading) {
+    web.send(
+      409,
+      "text/plain; charset=utf-8",
+      "Không thể hủy khi đang ghi firmware"
+    );
+
+    return;
+  }
+
+  otaMaintenanceRequested = false;
+  otaReady = false;
+  otaUploadSuccess = false;
+
+  otaStatusMessage =
+    "Đã thoát chế độ nạp";
+
+  addLog(
+    "OTA maintenance cancelled"
+  );
+
+  web.send(
+    200,
+    "text/plain; charset=utf-8",
+    "OK"
+  );
+}
+
+void handleUpdateUpload() {
+  HTTPUpload &upload =
+    web.upload();
+
+  if (
+    upload.status ==
+    UPLOAD_FILE_START
+  ) {
+
+    otaUploadAuthorized =
+      web.authenticate(
+        "admin",
+        supportPassword.c_str()
+      );
+
+    otaUploadStarted = false;
+    otaUploadSuccess = false;
+    otaBytesWritten = 0;
+    otaFileName = upload.filename;
+
+    if (!otaUploadAuthorized) {
+      otaStatusMessage =
+        "Sai xác thực";
+
+      addLog(
+        "OTA rejected: authentication failed"
+      );
+
+      return;
+    }
+
+    if (
+      !otaReady ||
+      !otaMaintenanceRequested ||
+      !allPrintJobsEmpty()
+    ) {
+
+      otaStatusMessage =
+        "Chưa sẵn sàng OTA";
+
+      addLog(
+        "OTA rejected: maintenance not ready"
+      );
+
+      return;
+    }
+
+    otaUploading = true;
+
+    otaStatusMessage =
+      "Đang chuẩn bị OTA";
+
+    addLog(
+      "OTA upload start: " +
+      otaFileName
+    );
+
+    logSystemSnapshot(
+      "OTA START"
+    );
+
+    if (
+      !Update.begin(
+        UPDATE_SIZE_UNKNOWN,
+        U_FLASH
+      )
+    ) {
+
+      otaStatusMessage =
+        "Update.begin failed: " +
+        String(
+          Update.errorString()
+        );
+
+      addLog(
+        "OTA ERROR: " +
+        otaStatusMessage
+      );
+
+      otaUploading = false;
+      return;
+    }
+
+    otaUploadStarted = true;
+
+    otaStatusMessage =
+      "Đang ghi firmware";
+  }
+
+  else if (
+    upload.status ==
+    UPLOAD_FILE_WRITE
+  ) {
+
+    if (
+      !otaUploadAuthorized ||
+      !otaUploadStarted ||
+      !otaUploading
+    ) {
+      return;
+    }
+
+    size_t written =
+      Update.write(
+        upload.buf,
+        upload.currentSize
+      );
+
+    if (
+      written !=
+      upload.currentSize
+    ) {
+
+      otaStatusMessage =
+        "Write failed: " +
+        String(
+          Update.errorString()
+        );
+
+      addLog(
+        "OTA ERROR: " +
+        otaStatusMessage
+      );
+
+      Update.abort();
+
+      otaUploading = false;
+      otaUploadStarted = false;
+
+      return;
+    }
+
+    otaBytesWritten +=
+      written;
+  }
+
+  else if (
+    upload.status ==
+    UPLOAD_FILE_END
+  ) {
+
+    if (
+      !otaUploadAuthorized ||
+      !otaUploadStarted
+    ) {
+      return;
+    }
+
+    if (
+      Update.end(true)
+    ) {
+
+      otaUploadSuccess = true;
+      otaUploading = false;
+      otaUploadStarted = false;
+
+      otaStatusMessage =
+        "Nạp thành công - đang khởi động lại";
+
+      addLog(
+        "OTA SUCCESS: " +
+        otaFileName +
+        " / " +
+        formatBytes(
+          otaBytesWritten
+        )
+      );
+
+      logSystemSnapshot(
+        "OTA COMPLETE"
+      );
+
+    } else {
+
+      otaUploadSuccess = false;
+      otaUploading = false;
+      otaUploadStarted = false;
+
+      otaStatusMessage =
+        "Update.end failed: " +
+        String(
+          Update.errorString()
+        );
+
+      addLog(
+        "OTA ERROR: " +
+        otaStatusMessage
+      );
+    }
+  }
+
+  else if (
+    upload.status ==
+    UPLOAD_FILE_ABORTED
+  ) {
+
+    if (
+      otaUploadStarted
+    ) {
+      Update.abort();
+    }
+
+    otaUploadSuccess = false;
+    otaUploading = false;
+    otaUploadStarted = false;
+
+    otaStatusMessage =
+      "Upload bị hủy";
+
+    addLog(
+      "OTA upload aborted"
+    );
+  }
+}
+
+void handleUpdateEnd() {
+  if (!supportAuth()) {
+    return;
+  }
+
+  web.sendHeader(
+    "Connection",
+    "close"
+  );
+
+  if (
+    otaUploadSuccess &&
+    !Update.hasError()
+  ) {
+
+    web.send(
+      200,
+      "text/plain; charset=utf-8",
+      "NẠP THÀNH CÔNG. ESP sẽ tự khởi động lại..."
+    );
+
+    otaRestartAt =
+      millis() + 1800;
+
+  } else {
+
+    String e =
+      otaStatusMessage;
+
+    if (
+      Update.hasError()
+    ) {
+      e += " / ";
+      e += Update.errorString();
+    }
+
+    web.send(
+      500,
+      "text/plain; charset=utf-8",
+      e
+    );
+  }
+}
+
+void startWeb() {
+  web.on(
+    "/",
+    HTTP_GET,
+    handleRoot
+  );
+
+  web.on(
+    "/jobs",
+    HTTP_GET,
+    handleJobs
+  );
+
+  web.on(
+    "/wifi",
+    HTTP_POST,
+    handleWifiSave
+  );
+
+  web.on(
+    "/scan",
+    HTTP_GET,
+    handleScan
+  );
+
+  web.on(
+    "/log",
+    HTTP_GET,
+    handleLogPage
+  );
+
+  web.on(
+    "/log.txt",
+    HTTP_GET,
+    handleLogDownload
+  );
+
+  web.on(
+    "/log/clear",
+    HTTP_POST,
+    handleLogClear
+  );
+
+  web.on(
+    "/forget",
+    HTTP_POST,
+    handleForget
+  );
+
+  web.on(
+    "/restart",
+    HTTP_POST,
+    handleRestart
+  );
+
+  web.on(
+    "/device-info",
+    HTTP_GET,
+    handleDeviceInfo
+  );
+
+  web.on(
+    "/support",
+    HTTP_GET,
+    handleSupportPage
+  );
+
+  web.on(
+    "/support/status",
+    HTTP_GET,
+    handleSupportStatus
+  );
+
+  web.on(
+    "/support/prepare",
+    HTTP_POST,
+    handleSupportPrepare
+  );
+
+  web.on(
+    "/support/cancel",
+    HTTP_POST,
+    handleSupportCancel
+  );
+
+  web.on(
+    "/update",
+    HTTP_POST,
+    handleUpdateEnd,
+    handleUpdateUpload
+  );
+
+  web.on(
+    "/generate_204",
+    HTTP_ANY,
+    captiveRedirect
+  );
+
+  web.on(
+    "/gen_204",
+    HTTP_ANY,
+    captiveRedirect
+  );
+
+  web.on(
+    "/hotspot-detect.html",
+    HTTP_ANY,
+    captiveRedirect
+  );
+
+  web.on(
+    "/connecttest.txt",
+    HTTP_ANY,
+    captiveRedirect
+  );
+
+  web.on(
+    "/ncsi.txt",
+    HTTP_ANY,
+    captiveRedirect
+  );
+
+  web.onNotFound(
+    captiveRedirect
+  );
+
+  web.begin();
+
+  addLog("Web server started");
+}
+
+
+void serviceBootButton() {
+  static bool wasPressed = false;
+  static uint32_t pressedAt = 0;
+
+  bool pressed =
+    digitalRead(
+      BOOT_BUTTON_PIN
+    ) == LOW;
+
+  if (
+    pressed &&
+    !wasPressed
+  ) {
+
+    wasPressed = true;
+    pressedAt = millis();
+
+    addLog(
+      "BOOT button pressed"
+    );
+
+    return;
+  }
+
+  if (
+    !pressed &&
+    wasPressed
+  ) {
+
+    wasPressed = false;
+
+    uint32_t held =
+      millis() -
+      pressedAt;
+
+    addLog(
+      "BOOT button released after " +
+      String(held) +
+      " ms"
+    );
+
+    if (
+      held >=
+      BOOT_WIFI_RESET_MS
+    ) {
+
+      addLog(
+        "BOOT >=10s: clear saved Wi-Fi + restart"
+      );
+
+      forgetWifiSettings();
+
+      delay(150);
+      ESP.restart();
+      return;
+    }
+
+    if (
+      held >=
+      BOOT_RESTART_MS
+    ) {
+
+      addLog(
+        "BOOT >=3s: restart"
+      );
+
+      delay(150);
+      ESP.restart();
+      return;
+    }
+  }
+}
+
+// ============================================================
+// Setup / loop
+// ============================================================
+void setup() {
+  pinMode(
+    LED_PIN,
+    OUTPUT
+  );
+
+  pinMode(
+    BOOT_BUTTON_PIN,
+    INPUT_PULLUP
+  );
+
+  ledWrite(true);
+
+  Serial.begin(115200);
+  delay(700);
+
+  systemLog.reserve(
+    LOG_MAX_CHARS + 512
+  );
+
+  initPrinterSlots();
+  buildIdentity();
+
+  addLog(
+    "Boot: Lumitool Printsever V7.5"
+  );
+
+  addLog(
+    "Identity: " +
+    apSsid +
+    " / " +
+    localUrl
+  );
+
+  addLog(
+    "Reset reason: " +
+    resetReasonText(
+      esp_reset_reason()
+    )
+  );
+
+  addLog(
+    "Support login: admin / suffix " +
+    macSuffix
+  );
+
+  addLog(
+    "Running OTA partition: " +
+    currentOtaPartitionLabel()
+  );
+
+  addLog(
+    "Next OTA partition: " +
+    nextOtaPartitionInfo()
+  );
+
+  logSystemSnapshot(
+    "BOOT"
+  );
+
+  if (psramFound()) {
+    addLog(
+      "PSRAM detected; queue limit " +
+      formatBytes(
+        runtimeTotalQueueLimit()
+      )
+    );
+  } else {
+    addLog(
+      "WARNING: PSRAM not detected; queue reduced to " +
+      formatBytes(
+        runtimeTotalQueueLimit()
+      )
+    );
+  }
+
+  loadWifiSettings();
+
+  startAccessPoint();
+  startPrintServers();
+  startWeb();
+
+  startDiscovery();
+
+  usb.onDeviceConnected(
+    [](const EspUsbHostDeviceInfo &device) {
+      String msg =
+        "USB connected addr=" +
+        String(device.address) +
+        " portId=0x" +
+        String(device.portId, HEX) +
+        " parent=" +
+        String(device.parentAddress) +
+        " VID:PID=" +
+        String(device.vid, HEX) +
+        ":" +
+        String(device.pid, HEX);
+
+      if (device.isHub) {
+        msg += " HUB";
+      }
+
+      addLog(msg);
+      usbDeviceChanged = true;
+    }
+  );
+
+  usb.onDeviceDisconnected(
+    [](const EspUsbHostDeviceInfo &device) {
+      addLog(
+        "USB disconnected addr=" +
+        String(device.address) +
+        " portId=0x" +
+        String(device.portId, HEX)
+      );
+
+      PrinterSlot *p =
+        slotByAddress(
+          device.address
+        );
+
+      if (p) {
+        setPrinterOffline(
+          *p,
+          "USB disconnected",
+          true
+        );
+      }
+
+      usbDeviceChanged = true;
+    }
+  );
+
+  if (!usb.begin()) {
+    fatalUsbHostError = true;
+
+    String e =
+      "USB Host start failed: ";
+
+    e += usb.lastErrorName();
+
+    setGlobalError(e);
+  } else {
+    addLog("USB Host started");
+  }
+
+  connectSavedWifi();
+}
+
+void loop() {
+  static uint32_t lastUsbScan = 0;
+  static uint32_t lastHealthLog = 0;
+
+  dns.processNextRequest();
+  web.handleClient();
+  processDiscovery();
+
+  serviceBootButton();
+
+  if (
+    otaRestartAt != 0 &&
+    (int32_t)(
+      millis() -
+      otaRestartAt
+    ) >= 0
+  ) {
+
+    addLog(
+      "OTA reboot now"
+    );
+
+    delay(80);
+    ESP.restart();
+  }
+
+  maintainWifi();
+
+  if (
+    !otaUploading &&
+    millis() -
+    lastHealthLog >=
+    60000UL
+  ) {
+
+    lastHealthLog =
+      millis();
+
+    logSystemSnapshot(
+      "HEALTH"
+    );
+  }
+
+  if (
+    usbDeviceChanged ||
+    millis() - lastUsbScan >= 1000) {
+
+    usbDeviceChanged = false;
+    lastUsbScan = millis();
+
+    scanUsbPrinters();
+  }
+
+  // Check for vanished devices even if callback was missed.
+  for (uint8_t i = 0; i < 3; i++) {
+    PrinterSlot &p = printers[i];
+
+    if (
+      p.ready &&
+      !addressStillPresent(p.address)) {
+
+      setPrinterOffline(
+        p,
+        "Device no longer present",
+        true
+      );
+    }
+  }
+
+  if (!otaUploading) {
+    pollPrinterStatuses();
+  }
+
+  if (otaMaintenanceRequested) {
+
+    for (uint8_t i = 0; i < 3; i++) {
+      rejectIncomingClient(
+        printers[i]
+      );
+    }
+
+    if (
+      !otaReady &&
+      !otaUploading
+    ) {
+
+      for (uint8_t i = 0; i < 3; i++) {
+        serviceReceivingJobs(
+          printers[i]
+        );
+      }
+
+      processPrinterQueue(
+        printers[0]
+      );
+
+      processPrinterQueue(
+        printers[1]
+      );
+
+      processPrinterQueue(
+        printers[2]
+      );
+
+      if (
+        allPrintJobsEmpty()
+      ) {
+
+        otaReady = true;
+
+        otaStatusMessage =
+          "Sẵn sàng nhận firmware";
+
+        addLog(
+          "OTA maintenance ready: all print jobs completed"
+        );
+
+      } else {
+
+        otaStatusMessage =
+          "Đang chờ job hiện tại hoàn tất";
+      }
+    }
+
+  } else if (
+    !otaUploading
+  ) {
+
+    for (uint8_t i = 0; i < 3; i++) {
+      acceptNewClient(
+        printers[i]
+      );
+
+      serviceReceivingJobs(
+        printers[i]
+      );
+    }
+
+    processPrinterQueue(
+      printers[0]
+    );
+
+    processPrinterQueue(
+      printers[1]
+    );
+
+    processPrinterQueue(
+      printers[2]
+    );
+  }
+
+  refreshLedMode();
+  updateStatusLed();
+
+  delay(1);
+}
