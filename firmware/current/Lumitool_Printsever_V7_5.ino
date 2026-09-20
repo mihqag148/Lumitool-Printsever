@@ -196,14 +196,12 @@ String uptimeStamp() {
 }
 
 void addLog(const String &msg) {
-  String line = uptimeStamp() + msg + "
-";
+  String line = uptimeStamp() + msg + "\n";
   systemLog += line;
 
   if (systemLog.length() > LOG_MAX_CHARS) {
     size_t target = systemLog.length() - (LOG_MAX_CHARS * 3 / 4);
-    int cut = systemLog.indexOf('
-', (unsigned int)target);
+    int cut = systemLog.indexOf('\n', (unsigned int)target);
     if (cut >= 0) systemLog.remove(0, cut + 1);
     else systemLog.remove(0, target);
   }
@@ -243,14 +241,13 @@ String jsonEscape(const String &s) {
   for (size_t i = 0; i < s.length(); i++) {
     char c = s[i];
 
-    if (c == '\' || c == '"') {
-      o += '\';
+    if (c == '\\' || c == '"') {
+      o += '\\';
       o += c;
-    } else if (c == '
-') {
-      o += "\n";
-    } else if (c == '') {
-      o += "\r";
+    } else if (c == '\n') {
+      o += "\\n";
+    } else if (c == '\r') {
+      o += "\\r";
     } else {
       o += c;
     }
@@ -2124,9 +2121,9 @@ void handleLogDownload() {
 
   web.sendHeader(
     "Content-Disposition",
-    "attachment; filename="" +
+    "attachment; filename=\"" +
     filename +
-    """
+    "\""
   );
 
   web.sendHeader(
@@ -2136,34 +2133,23 @@ void handleLogDownload() {
 
   String h;
 
-  h += "Lumitool Printsever V7.5
-";
-  h += "AP: " + apSsid + "
-";
-  h += "Local: " + localUrl + "
-";
-  h += "Printer A: TCP 9101
-";
-  h += "Printer B: TCP 9102
-";
-  h += "Printer C: TCP 9103
-";
+  h += "Lumitool Printsever V7.5\n";
+  h += "AP: " + apSsid + "\n";
+  h += "Local: " + localUrl + "\n";
+  h += "Printer A: TCP 9101\n";
+  h += "Printer B: TCP 9102\n";
+  h += "Printer C: TCP 9103\n";
   h += "PSRAM: ";
   h += psramFound()
-         ? "YES
-"
-         : "NO
-";
+         ? "YES\n"
+         : "NO\n";
   h += "Queue allocated: ";
   h += formatBytes(
     totalQueueAllocated
   );
-  h += "
-Global error: ";
+  h += "\nGlobal error: ";
   h += globalLastError;
-  h += "
-----------------------------------------
-";
+  h += "\n----------------------------------------\n";
 
   web.send(
     200,
@@ -2237,31 +2223,31 @@ void captiveRedirect() {
 String makeDeviceInfoJson() {
   String j = "{";
 
-  j += ""magic":"";
+  j += "\"magic\":\"";
   j += PRODUCT_MAGIC;
-  j += """;
+  j += "\"";
 
-  j += ","brand":"Lumitool"";
-  j += ","product":"Lumitool Printsever"";
-  j += ","version":"V7.5"";
+  j += ",\"brand\":\"Lumitool\"";
+  j += ",\"product\":\"Lumitool Printsever\"";
+  j += ",\"version\":\"V7.5\"";
 
-  j += ","id":"";
+  j += ",\"id\":\"";
   j += macSuffix;
-  j += """;
+  j += "\"";
 
-  j += ","device_name":"";
+  j += ",\"device_name\":\"";
   j += jsonEscape(hostName);
-  j += """;
+  j += "\"";
 
-  j += ","mac":"";
+  j += ",\"mac\":\"";
   j += stationMacText;
-  j += """;
+  j += "\"";
 
-  j += ","hostname":"";
+  j += ",\"hostname\":\"";
   j += hostName;
-  j += ".local"";
+  j += ".local\"";
 
-  j += ","ip":"";
+  j += ",\"ip\":\"";
 
   if (
     WiFi.status() ==
@@ -2276,23 +2262,23 @@ String makeDeviceInfoJson() {
       toString();
   }
 
-  j += """;
+  j += "\"";
 
-  j += ","ap_ip":"";
+  j += ",\"ap_ip\":\"";
   j +=
     WiFi.softAPIP().
     toString();
-  j += """;
+  j += "\"";
 
   j +=
-    ","ports":{"
-    ""A":9101,"
-    ""B":9102,"
-    ""C":9103"
+    ",\"ports\":{"
+    "\"A\":9101,"
+    "\"B\":9102,"
+    "\"C\":9103"
     "}";
 
   j +=
-    ","wifi_connected":";
+    ",\"wifi_connected\":";
 
   j +=
     WiFi.status() ==
@@ -2301,9 +2287,9 @@ String makeDeviceInfoJson() {
       : "false";
 
   j +=
-    ","printers":{";
+    ",\"printers\":{";
 
-  j += ""A":"";
+  j += "\"A\":\"";
   j +=
     jsonEscape(
       printerHealthText(
@@ -2311,7 +2297,7 @@ String makeDeviceInfoJson() {
       )
     );
 
-  j += "","B":"";
+  j += "\",\"B\":\"";
   j +=
     jsonEscape(
       printerHealthText(
@@ -2319,7 +2305,7 @@ String makeDeviceInfoJson() {
       )
     );
 
-  j += "","C":"";
+  j += "\",\"C\":\"";
   j +=
     jsonEscape(
       printerHealthText(
@@ -2327,7 +2313,7 @@ String makeDeviceInfoJson() {
       )
     );
 
-  j += ""}";
+  j += "\"}";
 
   j += "}";
 
