@@ -1,0 +1,74 @@
+name: Build Firmware
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "firmware/current/**"
+      - ".github/workflows/build-firmware.yml"
+  workflow_dispatch:
+
+jobs:
+  build-esp32s2:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 core and libraries
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ESP32_INDEX="https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+          arduino-cli core update-index --additional-urls "$ESP32_INDEX"
+          arduino-cli core install esp32:esp32@3.3.11 --additional-urls "$ESP32_INDEX"
+          arduino-cli lib update-index
+          arduino-cli lib install "EspUsbHost@2.9.0"
+
+      - name: Prepare sketch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf build/Lumitool_Printsever_V7_6
+          mkdir -p build/Lumitool_Printsever_V7_6
+          cp firmware/current/Lumitool_Printsever_V7_6.ino build/Lumitool_Printsever_V7_6/
+          cp firmware/current/build_opt.h build/Lumitool_Printsever_V7_6/
+          cp firmware/current/partitions.csv build/Lumitool_Printsever_V7_6/
+
+      - name: Compile ESP32-S2 firmware
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          arduino-cli compile \
+            --clean \
+            --fqbn "esp32:esp32:esp32s2:PSRAM=enabled,FlashSize=4M,FlashMode=qio" \
+            --output-dir dist \
+            build/Lumitool_Printsever_V7_6
+
+      - name: Prepare firmware package
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ls -lah dist
+          APP_BIN="$(find dist -maxdepth 1 -type f -name '*.ino.bin' | head -n 1)"
+          if [ -z "$APP_BIN" ]; then
+            echo "Application .bin not found"
+            exit 1
+          fi
+          cp "$APP_BIN" dist/Lumitool_Printsever_V7_6_OTA.bin
+          cp firmware/current/Lumitool_Printsever_V7_6.ino dist/
+          cp firmware/current/build_opt.h dist/
+          cp firmware/current/partitions.csv dist/
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lumitool-Printsever-Firmware-V7.6
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
