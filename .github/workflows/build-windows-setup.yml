@@ -1,15 +1,17 @@
-name: Build Windows Setup
+name: Validate Windows App Sources
 
 on:
   push:
     branches: [ main ]
     paths:
       - "windows-app/current/**"
+      - "windows-app/launcher/**"
+      - "windows-app/assets/**"
       - ".github/workflows/build-windows-setup.yml"
   workflow_dispatch:
 
 jobs:
-  validate-and-package:
+  validate:
     runs-on: windows-latest
 
     steps:
@@ -21,107 +23,51 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $required = @(
-            "windows-app/current/Lumitool_Printsever_Setup_V3_6.ps1",
+            "windows-app/current/Lumitool_Printsever_Setup_V4_1.ps1",
             "windows-app/current/Lumitool_Scan_Helper_V1.ps1",
-            "windows-app/current/Lumitool_Job_Watcher_V1.ps1",
-            "windows-app/current/Lumitool_Fix_Printing_Status_V2.ps1",
-            "windows-app/current/CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_6.cmd",
-            "windows-app/current/FIX_TRANG_THAI_DANG_IN.cmd"
+            "windows-app/current/Lumitool_Job_Watcher_V2.ps1",
+            "windows-app/current/Lumitool_OTA_Helper_V1.ps1",
+            "windows-app/current/Lumitool_Preinstall_Cleanup_V1.ps1",
+            "windows-app/current/Lumitool_Watcher_Install_V2.ps1",
+            "windows-app/launcher/Lumitool_Printsever_Launcher.cs",
+            "windows-app/launcher/Lumitool_Printsever_Launcher.manifest",
+            "windows-app/assets/Lumi3D_logo.png"
           )
 
           foreach ($path in $required) {
-            if (-not (Test-Path $path)) {
-              throw "Missing required file: $path"
-            }
+            if (-not (Test-Path $path)) { throw "Missing required file: $path" }
           }
 
-          $psFiles = Get-ChildItem "windows-app/current" -Filter "*.ps1" -File
-          foreach ($file in $psFiles) {
+          Get-ChildItem "windows-app/current" -Filter "*.ps1" -File | ForEach-Object {
             $tokens = $null
             $errors = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile(
-              $file.FullName,
-              [ref]$tokens,
-              [ref]$errors
-            )
-
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$errors)
             if ($errors.Count -gt 0) {
-              Write-Host "Syntax errors in $($file.Name):" -ForegroundColor Red
-              $errors | ForEach-Object {
-                Write-Host ("Line {0}: {1}" -f $_.Extent.StartLineNumber, $_.Message) -ForegroundColor Red
-              }
-              exit 1
+              $errors | ForEach-Object { Write-Host $_.Message -ForegroundColor Red }
+              throw "PowerShell syntax failed: $($_.Name)"
             }
-
-            Write-Host "OK: $($file.Name)"
+            Write-Host "OK: $($_.Name)"
           }
 
-      - name: Static checks
+      - name: Validate current architecture
         shell: powershell
         run: |
-          $ErrorActionPreference = "Stop"
-          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V3_6.ps1" -Raw
-          $helper = Get-Content "windows-app/current/Lumitool_Scan_Helper_V1.ps1" -Raw
-          $watcher = Get-Content "windows-app/current/Lumitool_Job_Watcher_V1.ps1" -Raw
-          $repair = Get-Content "windows-app/current/Lumitool_Fix_Printing_Status_V2.ps1" -Raw
+          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V4_1.ps1" -Raw
+          $watcher = Get-Content "windows-app/current/Lumitool_Job_Watcher_V2.ps1" -Raw
+          $cleanup = Get-Content "windows-app/current/Lumitool_Preinstall_Cleanup_V1.ps1" -Raw
+          $launcher = Get-Content "windows-app/launcher/Lumitool_Printsever_Launcher.cs" -Raw
 
-          $checks = @(
-            @{ Name = "Background process scan"; Text = "Start-Process powershell.exe"; Source = $main },
-            @{ Name = "Scan timer"; Text = "$scanTimer.Start()"; Source = $main },
-            @{ Name = "Cancel scan"; Text = "Stop-AsyncScan"; Source = $main },
-            @{ Name = "Progress file"; Text = "ProgressPath"; Source = $helper },
-            @{ Name = "UDP discovery"; Text = "LUMITOOL_DISCOVER_V1"; Source = $helper },
-            @{ Name = "Home LAN scan"; Text = "Get-NetIPAddress"; Source = $helper },
-            @{ Name = "Fast completion direct"; Text = "+direct"; Source = $main },
-            @{ Name = "Disable BIDI"; Text = "-enablebidi"; Source = $main },
-            @{ Name = "Restart spooler"; Text = "Restart-Service -Name Spooler"; Source = $main },
-            @{ Name = "Watcher API"; Text = "/api/jobs"; Source = $watcher },
-            @{ Name = "Watcher clears Windows job"; Text = "Remove-PrintJob"; Source = $watcher },
-            @{ Name = "Watcher source-IP guard"; Text = "sourceMatches"; Source = $watcher },
-            @{ Name = "Watcher task install"; Text = "Lumitool Printsever Job Watcher"; Source = $repair }
+          $must = @(
+            @("Spooling ON", $main),
+            @("Wait-PrinterVisible", $main),
+            @("Test-RawEndpoint", $main),
+            @("/api/jobs", $watcher),
+            @("Remove-PrintJob", $watcher),
+            @("Remove-Printer", $cleanup),
+            @("Remove-PrinterPort", $cleanup),
+            @("CreateNoWindow = true", $launcher)
           )
 
-          foreach ($check in $checks) {
-            if (-not $check.Source.Contains($check.Text)) {
-              throw "Static check failed: $($check.Name)"
-            }
-            Write-Host "OK: $($check.Name)"
+          foreach ($x in $must) {
+            if (-not $x[1].Contains($x[0])) { throw "Missing current feature: $($x[0])" }
           }
-
-      - name: Package setup
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          New-Item -ItemType Directory -Path dist -Force | Out-Null
-          New-Item -ItemType Directory -Path package -Force | Out-Null
-
-          Copy-Item "windows-app/current/Lumitool_Printsever_Setup_V3_6.ps1" package/
-          Copy-Item "windows-app/current/Lumitool_Scan_Helper_V1.ps1" package/
-          Copy-Item "windows-app/current/Lumitool_Job_Watcher_V1.ps1" package/
-          Copy-Item "windows-app/current/Lumitool_Fix_Printing_Status_V2.ps1" package/
-          Copy-Item "windows-app/current/CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_6.cmd" package/
-          Copy-Item "windows-app/current/FIX_TRANG_THAI_DANG_IN.cmd" package/
-
-          @"
-          Lumitool Printsever Windows Setup V3.6
-
-          1. Giai nen ZIP.
-          2. Chay CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_6.cmd.
-          3. Quet thiet bi chay nen, giao dien khong bi dung/treo.
-          4. Co nut HUY de dung quet.
-          5. Chon driver may in da cai tren Windows.
-          6. Cai Printer A/B/C tuong ung RAW 9101/9102/9103.
-          7. V3.6 cai Job Watcher: khi ESP /api/jobs xac nhan DONE, Windows job bi xoa khoi spooler sau 1.5 giay.
-          8. Watcher khong xoa neu ESP dang active/error; co kiem tra source IP.
-          9. Neu da cai queue cu, chay FIX_TRANG_THAI_DANG_IN.cmd mot lan de cai watcher.
-          "@ | Set-Content package/README.txt -Encoding UTF8
-
-          Compress-Archive -Path package/* -DestinationPath "dist/Lumitool_Printsever_Windows_Setup_V3_6.zip" -Force
-
-      - name: Upload Windows setup artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Lumitool-Printsever-Windows-Setup-V3.6
-          path: dist/Lumitool_Printsever_Windows_Setup_V3_6.zip
-          if-no-files-found: error
-          retention-days: 30
