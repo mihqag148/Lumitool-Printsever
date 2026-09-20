@@ -1,0 +1,21 @@
+# Arduino build output
+*.bin
+*.elf
+*.map
+*.hex
+*.uf2
+*.zip
+build/
+.vscode/
+.idea/
+
+# Local/customer secrets
+secrets.*
+*.secret
+.env
+.env.*
+
+# Windows temp/debug
+*.log
+Thumbs.db
+Desktop.ini
