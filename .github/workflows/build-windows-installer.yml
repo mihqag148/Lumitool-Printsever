@@ -1,0 +1,141 @@
+name: Build Windows Installer EXE
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "windows-app/current/**"
+      - "windows-app/installer/**"
+      - ".github/workflows/build-windows-installer.yml"
+  workflow_dispatch:
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Windows PowerShell 5.1 syntax
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $required = @(
+            "windows-app/current/Lumitool_Printsever_Setup_V3_7.ps1",
+            "windows-app/current/Lumitool_Scan_Helper_V1.ps1",
+            "windows-app/current/Lumitool_Job_Watcher_V1.ps1",
+            "windows-app/current/Lumitool_Fix_Printing_Status_V2.ps1",
+            "windows-app/current/Lumitool_Printsever_Launcher.cmd",
+            "windows-app/current/Lumitool_Printsever_Repair.cmd",
+            "windows-app/installer/Lumitool_Printsever_V3_7.iss"
+          )
+
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) {
+              throw "Missing required file: $path"
+            }
+          }
+
+          $psFiles = Get-ChildItem "windows-app/current" -Filter "*.ps1" -File
+          foreach ($file in $psFiles) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $file.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            )
+
+            if ($errors.Count -gt 0) {
+              Write-Host "Syntax errors in $($file.Name):" -ForegroundColor Red
+              $errors | ForEach-Object {
+                Write-Host ("Line {0}: {1}" -f $_.Extent.StartLineNumber, $_.Message) -ForegroundColor Red
+              }
+              exit 1
+            }
+
+            Write-Host "OK: $($file.Name)"
+          }
+
+      - name: Static integration checks
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V3_7.ps1" -Raw
+          $watcher = Get-Content "windows-app/current/Lumitool_Job_Watcher_V1.ps1" -Raw
+          $iss = Get-Content "windows-app/installer/Lumitool_Printsever_V3_7.iss" -Raw
+
+          $checks = @(
+            @{ Name = "Main installs watcher"; Text = "Install-LumitoolJobWatcher"; Source = $main },
+            @{ Name = "Main saves queue config"; Text = "Save-LumitoolWatcherQueue"; Source = $main },
+            @{ Name = "Watcher reads ESP jobs API"; Text = "/api/jobs"; Source = $watcher },
+            @{ Name = "Watcher clears completed Windows jobs"; Text = "Remove-PrintJob"; Source = $watcher },
+            @{ Name = "Installer includes main setup"; Text = "Lumitool_Printsever_Setup_V3_7.ps1"; Source = $iss },
+            @{ Name = "Installer includes watcher"; Text = "Lumitool_Job_Watcher_V1.ps1"; Source = $iss },
+            @{ Name = "Installer auto launches setup"; Text = "[Run]"; Source = $iss }
+          )
+
+          foreach ($check in $checks) {
+            if (-not $check.Source.Contains($check.Text)) {
+              throw "Static check failed: $($check.Name)"
+            }
+            Write-Host "OK: $($check.Name)"
+          }
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $candidates = @(
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+          )
+
+          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $iscc) {
+            choco install innosetup --no-progress -y
+            $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+
+          if (-not $iscc) {
+            throw "ISCC.exe not found after Inno Setup install"
+          }
+
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Using $iscc"
+
+      - name: Build single EXE installer
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+
+          & "$env:ISCC" "windows-app\installer\Lumitool_Printsever_V3_7.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup failed with exit code $LASTEXITCODE"
+          }
+
+          $exe = "dist\Lumitool_Printsever_Setup_V3_7.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Installer EXE was not created"
+          }
+
+          $item = Get-Item $exe
+          Write-Host ("Installer: " + $item.FullName)
+          Write-Host ("Size: " + $item.Length + " bytes")
+
+          $sig = Get-AuthenticodeSignature $exe
+          Write-Host ("Authenticode: " + $sig.Status)
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lumitool-Printsever-Setup-V3.7-EXE
+          path: dist/Lumitool_Printsever_Setup_V3_7.exe
+          if-no-files-found: error
+          retention-days: 30
