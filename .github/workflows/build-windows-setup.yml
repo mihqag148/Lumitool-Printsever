@@ -69,8 +69,8 @@ jobs:
             @{ Name = "Progress file"; Text = "ProgressPath"; Source = $helper },
             @{ Name = "UDP discovery"; Text = "LUMITOOL_DISCOVER_V1"; Source = $helper },
             @{ Name = "Home LAN scan"; Text = "Get-NetIPAddress"; Source = $helper },
-            @{ Name = "Fast completion direct"; Text = "Direct              = $true"; Source = $main },
-            @{ Name = "Disable BIDI"; Text = "EnableBIDI          = $false"; Source = $main },
+            @{ Name = "Fast completion direct"; Text = "+direct"; Source = $main },
+            @{ Name = "Disable BIDI"; Text = "-enablebidi"; Source = $main },
             @{ Name = "Restart spooler"; Text = "Restart-Service -Name Spooler"; Source = $main }
           )
 
