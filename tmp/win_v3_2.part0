@@ -1,0 +1,625 @@
+$ErrorActionPreference = "Stop"
+
+$LogPath = Join-Path $env:TEMP "Lumitool_Printsever_Setup_V3_2.log"
+
+function Write-DebugLog {
+    param([string]$Text)
+    try {
+        Add-Content -Path $LogPath -Value ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Text) -Encoding UTF8
+    } catch {}
+}
+
+try {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    [System.Windows.Forms.Application]::EnableVisualStyles()
+
+    Write-DebugLog "=== START V3.2 ==="
+    Write-DebugLog ("PowerShell: " + $PSVersionTable.PSVersion.ToString())
+
+    Import-Module PrintManagement -ErrorAction Stop
+    Write-DebugLog "PrintManagement loaded"
+
+    $script:CurrentIP = ""
+    $script:CurrentName = ""
+    $script:CurrentHtml = ""
+    $script:DriverNames = @()
+
+    $script:CacheDir = Join-Path $env:LOCALAPPDATA "Lumitool\Printsever"
+    $script:CachePath = Join-Path $script:CacheDir "devices.json"
+    $script:ScanResults = @()
+    $script:ScanSeen = @{}
+
+    function UiLog {
+        param([string]$Text)
+        Write-DebugLog $Text
+        if ($script:txtLog) {
+            $script:txtLog.AppendText(("[" + (Get-Date -Format "HH:mm:ss") + "] " + $Text + "`r`n"))
+            $script:txtLog.SelectionStart = $script:txtLog.TextLength
+            $script:txtLog.ScrollToCaret()
+            [System.Windows.Forms.Application]::DoEvents()
+        }
+    }
+
+    function Get-EspHtml {
+        param([string]$IP)
+
+        try {
+            $r = Invoke-WebRequest `
+                -Uri ("http://" + $IP + "/") `
+                -UseBasicParsing `
+                -TimeoutSec 2 `
+                -ErrorAction Stop
+
+            if (
+                $r.StatusCode -eq 200 -and
+                (
+                    $r.Content -match "Lumitool Printsever" -or
+                    $r.Content -match "ESP Print Server"
+                )
+            ) {
+                return [string]$r.Content
+            }
+        } catch {}
+
+        return $null
+    }
+
+    function Get-NameFromHtml {
+        param(
+            [string]$Html,
+            [string]$IP
+        )
+
+        if (
+            $Html -match '(?:Lumitool Printsever|ESP Print Server)\s+([0-9A-Fa-f]{4})'
+        ) {
+            return (
+                "Lumitool-Printsever-" +
+                $Matches[1].ToUpper()
+            )
+        }
+
+        return (
+            "Lumitool-Printsever @ " +
+            $IP
+        )
+    }
+
+    function Get-LumitoolIdentity {
+        param([string]$IP)
+
+        # Firmware V7.4+: exact identity endpoint.
+        try {
+            $r = Invoke-WebRequest `
+                -Uri ("http://" + $IP + "/device-info") `
+                -UseBasicParsing `
+                -TimeoutSec 2 `
+                -ErrorAction Stop
+
+            if ($r.StatusCode -eq 200) {
+                $o = $r.Content | ConvertFrom-Json
+
+                if (
+                    [string]$o.magic -eq "LUMITOOL_PRINTSEVER" -and
+                    [string]$o.product -eq "Lumitool Printsever"
+                ) {
+                    return [pscustomobject]@{
+                        IP = [string]$IP
+                        Name = (
+                            "Lumitool-Printsever-" +
+                            [string]$o.id
+                        )
+                        Strong = $true
+                    }
+                }
+            }
+        } catch {}
+
+        # Firmware cũ: nhận diện bằng chữ ký web.
+        $html = Get-EspHtml -IP $IP
+
+        if ($html) {
+            return [pscustomobject]@{
+                IP = [string]$IP
+                Name = Get-NameFromHtml -Html $html -IP $IP
+                Strong = $false
+            }
+        }
+
+        return $null
+    }
+
+
+    function Get-StatusFromHtml {
+        param([string]$Html, [string]$Letter, [int]$TcpPort)
+
+        if ([string]::IsNullOrWhiteSpace($Html)) {
+            return "Không đọc được"
+        }
+
+        $rx1 = "(?s)PORT\s*" + [regex]::Escape($Letter) + ".*?" + $TcpPort + ".*?<div class='(?:ok|bad|warn)'[^>]*>([^<]+)</div>"
+        $m1 = [regex]::Match($Html, $rx1, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($m1.Success) {
+            return [System.Net.WebUtility]::HtmlDecode($m1.Groups[1].Value.Trim())
+        }
+
+        $rx2 = "(?s)PORT\s*" + [regex]::Escape($Letter) + ".*?(ONLINE|OFFLINE|SẴN SÀNG|HẾT GIẤY|LỖI|CHƯA SẴN SÀNG)"
+        $m2 = [regex]::Match($Html, $rx2, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($m2.Success) {
+            return $m2.Groups[1].Value.Trim()
+        }
+
+        return "Không xác định"
+    }
+
+    function Paint-Status {
+        param([System.Windows.Forms.Label]$Label, [string]$Status)
+
+        $Label.Text = $Status
+
+        if ($Status -match "OFFLINE|LỖI|HẾT GIẤY|Không") {
+            $Label.ForeColor = [Drawing.Color]::FromArgb(183,28,28)
+        } elseif ($Status -match "ONLINE|SẴN SÀNG|READY") {
+            $Label.ForeColor = [Drawing.Color]::FromArgb(20,125,55)
+        } else {
+            $Label.ForeColor = [Drawing.Color]::FromArgb(178,106,0)
+        }
+    }
+
+    function Update-Device {
+        param([string]$IP, [string]$Html)
+
+        $script:CurrentIP = $IP
+        $script:CurrentHtml = $Html
+        $script:CurrentName = Get-NameFromHtml -Html $Html -IP $IP
+
+        $txtIP.Text = $IP
+        $lblDevice.Text = $script:CurrentName + "  ·  " + $IP
+
+        Paint-Status $lblA (Get-StatusFromHtml $Html "A" 9101)
+        Paint-Status $lblB (Get-StatusFromHtml $Html "B" 9102)
+        Paint-Status $lblC (Get-StatusFromHtml $Html "C" 9103)
+
+        UiLog ("Đã kết nối " + $script:CurrentName + " - " + $IP)
+    }
+
+    function Connect-IP {
+        $ip = $txtIP.Text.Trim()
+
+        $tmp = $null
+
+        if (
+            -not
+            [System.Net.IPAddress]::TryParse(
+                $ip,
+                [ref]$tmp
+            )
+        ) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "IP không hợp lệ.",
+                "Lumitool Printsever",
+                "OK",
+                "Warning"
+            ) | Out-Null
+            return
+        }
+
+        $lblTop.Text =
+            "Đang kết nối " +
+            $ip +
+            "..."
+
+        [System.Windows.Forms.Application]::DoEvents()
+
+        $dev =
+            Get-LumitoolIdentity `
+            -IP $ip
+
+        if (-not $dev) {
+            $lblTop.Text =
+                "Không kết nối được"
+
+            UiLog(
+                "Không tìm thấy Lumitool Printsever tại " +
+                $ip
+            )
+
+            [System.Windows.Forms.MessageBox]::Show(
+                "Không tìm thấy Lumitool Printsever tại " +
+                $ip +
+                ".",
+                "Không kết nối được",
+                "OK",
+                "Warning"
+            ) | Out-Null
+            return
+        }
+
+        $html =
+            Get-EspHtml `
+            -IP $ip
+
+        if (-not $html) {
+            $html = ""
+        }
+
+        Update-Device `
+            -IP $ip `
+            -Html $html
+
+        $script:CurrentName =
+            $dev.Name
+
+        $lblDevice.Text =
+            $dev.Name +
+            "  ·  " +
+            $ip
+
+        $lblTop.Text =
+            "Đã kết nối"
+    }
+
+    function Get-ActiveIPv4Adapters {
+        $items = @()
+
+        try {
+            $ips =
+                Get-NetIPAddress `
+                    -AddressFamily IPv4 `
+                    -ErrorAction Stop |
+                Where-Object {
+                    $_.IPAddress -notmatch "^127\." -and
+                    $_.IPAddress -notmatch "^169\.254\." -and
+                    $_.AddressState -ne "Duplicate"
+                }
+
+            foreach ($x in $ips) {
+                $ip =
+                    [string]$x.IPAddress
+
+                if (
+                    $ip -match
+                    '^(\d+)\.(\d+)\.(\d+)\.\d+$'
+                ) {
+                    $base =
+                        $Matches[1] +
+                        "." +
+                        $Matches[2] +
+                        "." +
+                        $Matches[3]
+
+                    $broadcast =
+                        $base +
+                        ".255"
+
+                    $exists =
+                        $false
+
+                    foreach ($old in $items) {
+                        if (
+                            $old.IP -eq
+                            $ip
+                        ) {
+                            $exists =
+                                $true
+                            break
+                        }
+                    }
+
+                    if (-not $exists) {
+                        $items +=
+                            [pscustomobject]@{
+                                IP = $ip
+                                Prefix = [int]$x.PrefixLength
+                                Base = $base
+                                Broadcast = $broadcast
+                                InterfaceIndex = $x.InterfaceIndex
+                            }
+                    }
+                }
+            }
+        } catch {
+            UiLog(
+                "Đọc card mạng lỗi: " +
+                $_.Exception.Message
+            )
+        }
+
+        return $items
+    }
+
+    function Get-LanBases {
+        $bases = @()
+
+        foreach (
+            $x in @(Get-ActiveIPv4Adapters)
+        ) {
+            if (
+                $bases -notcontains
+                $x.Base
+            ) {
+                $bases +=
+                    $x.Base
+            }
+        }
+
+        # Setup AP network is always checked too.
+        if (
+            $bases -notcontains
+            "192.168.10"
+        ) {
+            $bases +=
+                "192.168.10"
+        }
+
+        return $bases
+    }
+
+    function Load-CachedDevices {
+        if (
+            -not
+            (Test-Path $script:CachePath)
+        ) {
+            return @()
+        }
+
+        try {
+            $raw =
+                Get-Content `
+                    -Path $script:CachePath `
+                    -Raw `
+                    -ErrorAction Stop
+
+            if (
+                [string]::IsNullOrWhiteSpace(
+                    $raw
+                )
+            ) {
+                return @()
+            }
+
+            return @(
+                $raw |
+                ConvertFrom-Json
+            )
+        } catch {
+            return @()
+        }
+    }
+
+    function Save-DeviceCache {
+        param($Device)
+
+        if (-not $Device) {
+            return
+        }
+
+        try {
+            if (
+                -not
+                (Test-Path $script:CacheDir)
+            ) {
+                New-Item `
+                    -ItemType Directory `
+                    -Path $script:CacheDir `
+                    -Force |
+                    Out-Null
+            }
+
+            $id = ""
+
+            if (
+                [string]$Device.Name -match
+                '([0-9A-Fa-f]{4})$'
+            ) {
+                $id =
+                    $Matches[1].
+                    ToUpper()
+            }
+
+            $keep = @()
+
+            foreach (
+                $x in @(Load-CachedDevices)
+            ) {
+                if (
+                    [string]$x.IP -eq
+                    [string]$Device.IP
+                ) {
+                    continue
+                }
+
+                if (
+                    $id -and
+                    [string]$x.ID -eq
+                    $id
+                ) {
+                    continue
+                }
+
+                $keep +=
+                    $x
+            }
+
+            $keep +=
+                [pscustomobject]@{
+                    ID = $id
+                    IP = [string]$Device.IP
+                    Name = [string]$Device.Name
+                    LastSeen = (
+                        Get-Date
+                    ).ToString("s")
+                }
+
+            $keep |
+                ConvertTo-Json -Depth 3 |
+                Set-Content `
+                    -Path $script:CachePath `
+                    -Encoding UTF8
+        } catch {
+            UiLog(
+                "Lưu IP thiết bị lỗi: " +
+                $_.Exception.Message
+            )
+        }
+    }
+
+    function Register-ScanDevice {
+        param($Device)
+
+        if (-not $Device) {
+            return
+        }
+
+        $ip =
+            [string]$Device.IP
+
+        if (
+            [string]::IsNullOrWhiteSpace(
+                $ip
+            )
+        ) {
+            return
+        }
+
+        if (
+            $script:ScanSeen.ContainsKey(
+                $ip
+            )
+        ) {
+            return
+        }
+
+        $script:ScanSeen[$ip] =
+            $true
+
+        $script:ScanResults +=
+            $Device
+
+        Save-DeviceCache `
+            -Device $Device
+    }
+
+    function Get-NeighborCandidates {
+        $out = @()
+
+        try {
+            $items =
+                Get-NetNeighbor `
+                    -AddressFamily IPv4 `
+                    -ErrorAction Stop |
+                Where-Object {
+                    $_.IPAddress -notmatch "^224\." -and
+                    $_.IPAddress -notmatch "^255\." -and
+                    $_.State -ne "Unreachable"
+                }
+
+            foreach ($x in $items) {
+                $ip =
+                    [string]$x.IPAddress
+
+                if (
+                    $out -notcontains
+                    $ip
+                ) {
+                    $out +=
+                        $ip
+                }
+            }
+        } catch {}
+
+        return $out
+    }
+
+    function Find-LumitoolUdp {
+        $results = @()
+        $seen = @{}
+
+        $payload =
+            [System.Text.Encoding]::ASCII.
+            GetBytes(
+                "LUMITOOL_DISCOVER_V1"
+            )
+
+        # IMPORTANT:
+        # One UDP socket per active adapter.
+        # This lets discovery work on Wi-Fi + Ethernet instead of
+        # Windows picking only one default interface.
+        foreach (
+            $adapter in @(Get-ActiveIPv4Adapters)
+        ) {
+            $udp = $null
+
+            try {
+                UiLog(
+                    "UDP " +
+                    $adapter.IP +
+                    " -> " +
+                    $adapter.Broadcast
+                )
+
+                $localIp =
+                    [System.Net.IPAddress]::Parse(
+                        [string]$adapter.IP
+                    )
+
+                $localEp =
+                    New-Object
+                    System.Net.IPEndPoint(
+                        $localIp,
+                        0
+                    )
+
+                $udp =
+                    New-Object
+                    System.Net.Sockets.UdpClient
+
+                $udp.EnableBroadcast =
+                    $true
+
+                $udp.Client.Bind(
+                    $localEp
+                )
+
+                foreach (
+                    $targetText in @(
+                        [string]$adapter.Broadcast,
+                        "255.255.255.255"
+                    )
+                ) {
+                    try {
+                        $targetIp =
+                            [System.Net.IPAddress]::Parse(
+                                $targetText
+                            )
+
+                        $targetEp =
+                            New-Object
+                            System.Net.IPEndPoint(
+                                $targetIp,
+                                4210
+                            )
+
+                        [void]$udp.Send(
+                            $payload,
+                            [int]$payload.Length,
+                            $targetEp
+                        )
+                    } catch {}
+                }
+
+                $deadline =
+                    [DateTime]::UtcNow.
+                    AddMilliseconds(900)
+
+                while (
+                    [DateTime]::UtcNow -lt
+                    $deadline
+                ) {
+                    try {
+                        if (
+                            $udp.Available -gt
+                            0
+                        ) {
+      
