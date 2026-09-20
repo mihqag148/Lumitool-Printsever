@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = "Stop"
 
-$LogPath = Join-Path $env:TEMP "Lumitool_Printsever_Setup_V3_7.log"
+$LogPath = Join-Path $env:TEMP "Lumitool_Printsever_Setup_V3_8.log"
 
 function Write-DebugLog {
     param([string]$Text)
@@ -14,7 +14,7 @@ try {
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
 
-    Write-DebugLog "=== START V3.7 SINGLE-INSTALL ==="
+    Write-DebugLog "=== START V3.8 SINGLE-INSTALL ==="
     Write-DebugLog ("PowerShell: " + $PSVersionTable.PSVersion.ToString())
 
     Import-Module PrintManagement -ErrorAction Stop
@@ -1229,7 +1229,7 @@ try {
         # the RAW socket before the physical printer has finished printing.
         # A vendor language monitor can then keep the Windows job in
         # "Printing" while waiting for a device-status signal that our
-        # generic ESP print server cannot provide. V3.7 therefore puts the
+        # generic ESP print server cannot provide. V3.8 therefore puts the
         # queue in direct/unidirectional mode and verifies the actual WMI flags.
         Disable-PortSnmp -PortName $PortName
         Disable-PrinterBidi -PrinterName $PrinterName
@@ -1797,11 +1797,548 @@ try {
         }
     }
 
+
+    function Get-CurrentDeviceSuffix {
+        if ($script:CurrentName -match '([0-9A-Fa-f]{4})
+    $form = New-Object Windows.Forms.Form
+    $form.Text = "Lumitool Printsever V3.8"
+    $form.Size = New-Object Drawing.Size(820,690)
+    $form.MinimumSize = New-Object Drawing.Size(790,650)
+    $form.StartPosition = "CenterScreen"
+    $form.Font = New-Object Drawing.Font("Segoe UI",9)
+    $form.BackColor = [Drawing.Color]::FromArgb(245,246,248)
+
+    $title = New-Object Windows.Forms.Label
+    $title.Text = "Lumitool Printsever"
+    $title.Font = New-Object Drawing.Font("Segoe UI Semibold",20)
+    $title.Location = New-Object Drawing.Point(20,14)
+    $title.AutoSize = $true
+    $form.Controls.Add($title)
+
+    $lblTop = New-Object Windows.Forms.Label
+    $lblTop.Text = "Sẵn sàng"
+    $lblTop.Location = New-Object Drawing.Point(24,54)
+    $lblTop.Size = New-Object Drawing.Size(740,22)
+    $form.Controls.Add($lblTop)
+
+    $grpDevice = New-Object Windows.Forms.GroupBox
+    $grpDevice.Text = "1. Kết nối ESP"
+    $grpDevice.Location = New-Object Drawing.Point(20,82)
+    $grpDevice.Size = New-Object Drawing.Size(760,116)
+    $form.Controls.Add($grpDevice)
+
+    $btnFind = New-Object Windows.Forms.Button
+    $btnFind.Text = "QUÉT TẤT CẢ MẠNG"
+    $btnFind.Location = New-Object Drawing.Point(14,27)
+    $btnFind.Size = New-Object Drawing.Size(120,34)
+    $grpDevice.Controls.Add($btnFind)
+
+    $btnCancelScan = New-Object Windows.Forms.Button
+    $btnCancelScan.Text = "HỦY"
+    $btnCancelScan.Location = New-Object Drawing.Point(140,27)
+    $btnCancelScan.Size = New-Object Drawing.Size(65,34)
+    $btnCancelScan.Enabled = $false
+    $grpDevice.Controls.Add($btnCancelScan)
+
+    $txtIP = New-Object Windows.Forms.TextBox
+    $txtIP.Text = "192.168.10.1"
+    $txtIP.Location = New-Object Drawing.Point(215,32)
+    $txtIP.Size = New-Object Drawing.Size(125,26)
+    $grpDevice.Controls.Add($txtIP)
+
+    $btnConnect = New-Object Windows.Forms.Button
+    $btnConnect.Text = "Kết nối IP"
+    $btnConnect.Location = New-Object Drawing.Point(350,28)
+    $btnConnect.Size = New-Object Drawing.Size(105,32)
+    $grpDevice.Controls.Add($btnConnect)
+
+    $btnRefresh = New-Object Windows.Forms.Button
+    $btnRefresh.Text = "Làm mới"
+    $btnRefresh.Location = New-Object Drawing.Point(465,28)
+    $btnRefresh.Size = New-Object Drawing.Size(90,32)
+    $grpDevice.Controls.Add($btnRefresh)
+
+    $btnWeb = New-Object Windows.Forms.Button
+    $btnWeb.Text = "Mở Web"
+    $btnWeb.Location = New-Object Drawing.Point(555,28)
+    $btnWeb.Size = New-Object Drawing.Size(88,32)
+    $grpDevice.Controls.Add($btnWeb)
+
+    $btnSupport = New-Object Windows.Forms.Button
+    $btnSupport.Text = "OTA"
+    $btnSupport.Location = New-Object Drawing.Point(650,28)
+    $btnSupport.Size = New-Object Drawing.Size(88,32)
+    $grpDevice.Controls.Add($btnSupport)
+
+    $lblDevice = New-Object Windows.Forms.Label
+    $lblDevice.Text = "-"
+    $lblDevice.Font = New-Object Drawing.Font("Segoe UI Semibold",10)
+    $lblDevice.Location = New-Object Drawing.Point(16,75)
+    $lblDevice.Size = New-Object Drawing.Size(710,24)
+    $grpDevice.Controls.Add($lblDevice)
+
+    $scanProgress = New-Object Windows.Forms.ProgressBar
+    $scanProgress.Location = New-Object Drawing.Point(16,100)
+    $scanProgress.Size = New-Object Drawing.Size(724,10)
+    $scanProgress.Style = "Blocks"
+    $scanProgress.Value = 0
+    $grpDevice.Controls.Add($scanProgress)
+
+    $grpDriver = New-Object Windows.Forms.GroupBox
+    $grpDriver.Text = "2. Chọn driver máy in (hỗ trợ mọi model đã cài driver trên Windows)"
+    $grpDriver.Location = New-Object Drawing.Point(20,208)
+    $grpDriver.Size = New-Object Drawing.Size(760,118)
+    $form.Controls.Add($grpDriver)
+
+    $lblDriverSearch = New-Object Windows.Forms.Label
+    $lblDriverSearch.Text = "Tìm driver:"
+    $lblDriverSearch.Location = New-Object Drawing.Point(14,31)
+    $lblDriverSearch.Size = New-Object Drawing.Size(72,22)
+    $grpDriver.Controls.Add($lblDriverSearch)
+
+    $txtDriverSearch = New-Object Windows.Forms.TextBox
+    $txtDriverSearch.Location = New-Object Drawing.Point(88,27)
+    $txtDriverSearch.Size = New-Object Drawing.Size(256,26)
+    $grpDriver.Controls.Add($txtDriverSearch)
+
+    $btnReloadDrivers = New-Object Windows.Forms.Button
+    $btnReloadDrivers.Text = "Nạp lại driver"
+    $btnReloadDrivers.Location = New-Object Drawing.Point(354,24)
+    $btnReloadDrivers.Size = New-Object Drawing.Size(120,32)
+    $grpDriver.Controls.Add($btnReloadDrivers)
+
+    $cmbDriver = New-Object Windows.Forms.ComboBox
+    $cmbDriver.DropDownStyle = "DropDownList"
+    $cmbDriver.Location = New-Object Drawing.Point(14,61)
+    $cmbDriver.Size = New-Object Drawing.Size(550,28)
+    $grpDriver.Controls.Add($cmbDriver)
+
+    $lblDriver = New-Object Windows.Forms.Label
+    $lblDriver.Text = "-"
+    $lblDriver.Location = New-Object Drawing.Point(575,65)
+    $lblDriver.Size = New-Object Drawing.Size(165,40)
+    $grpDriver.Controls.Add($lblDriver)
+
+    function Make-PrinterBox {
+        param([string]$Letter,[int]$Port,[int]$X)
+
+        $g = New-Object Windows.Forms.GroupBox
+        $g.Text = "Printer " + $Letter + " · RAW " + $Port
+        $g.Location = New-Object Drawing.Point($X,338)
+        $g.Size = New-Object Drawing.Size(242,150)
+        $form.Controls.Add($g)
+
+        $st = New-Object Windows.Forms.Label
+        $st.Text = "Chưa kết nối"
+        $st.Font = New-Object Drawing.Font("Segoe UI Semibold",10)
+        $st.Location = New-Object Drawing.Point(14,31)
+        $st.Size = New-Object Drawing.Size(205,26)
+        $g.Controls.Add($st)
+
+        $note = New-Object Windows.Forms.Label
+        $note.Text = "Chọn đúng driver ở phía trên."
+        $note.Location = New-Object Drawing.Point(14,62)
+        $note.Size = New-Object Drawing.Size(205,34)
+        $note.ForeColor = [Drawing.Color]::DimGray
+        $g.Controls.Add($note)
+
+        $b = New-Object Windows.Forms.Button
+        $b.Text = "CÀI PRINTER " + $Letter
+        $b.Location = New-Object Drawing.Point(14,105)
+        $b.Size = New-Object Drawing.Size(210,32)
+        $g.Controls.Add($b)
+
+        return [pscustomobject]@{ Status=$st; Button=$b }
+    }
+
+    $A = Make-PrinterBox "A" 9101 20
+    $B = Make-PrinterBox "B" 9102 272
+    $C = Make-PrinterBox "C" 9103 524
+
+    $lblA = $A.Status
+    $lblB = $B.Status
+    $lblC = $C.Status
+
+    $grpLog = New-Object Windows.Forms.GroupBox
+    $grpLog.Text = "Log"
+    $grpLog.Location = New-Object Drawing.Point(20,500)
+    $grpLog.Size = New-Object Drawing.Size(760,130)
+    $grpLog.Anchor = "Top,Bottom,Left,Right"
+    $form.Controls.Add($grpLog)
+
+    $script:txtLog = New-Object Windows.Forms.TextBox
+    $script:txtLog.Multiline = $true
+    $script:txtLog.ReadOnly = $true
+    $script:txtLog.ScrollBars = "Vertical"
+    $script:txtLog.Font = New-Object Drawing.Font("Consolas",9)
+    $script:txtLog.Location = New-Object Drawing.Point(12,23)
+    $script:txtLog.Size = New-Object Drawing.Size(736,95)
+    $script:txtLog.Anchor = "Top,Bottom,Left,Right"
+    $grpLog.Controls.Add($script:txtLog)
+
+    $scanTimer = New-Object Windows.Forms.Timer
+    $scanTimer.Interval = 250
+    $scanTimer.Add_Tick({
+        if ($script:ScanProgressPath -and (Test-Path $script:ScanProgressPath)) {
+            try {
+                $p = Get-Content $script:ScanProgressPath -Raw -ErrorAction Stop | ConvertFrom-Json
+                if ($p.text) { $lblTop.Text = [string]$p.text }
+
+                if ($null -ne $p.percent) {
+                    $value = [Math]::Max(0, [Math]::Min(100, [int]$p.percent))
+                    $scanProgress.Style = "Blocks"
+                    $scanProgress.Value = $value
+                }
+            } catch {}
+        }
+
+        if ($script:ScanProcess -and $script:ScanProcess.HasExited) {
+            $scanTimer.Stop()
+            $btnFind.Enabled = $true
+            $btnCancelScan.Enabled = $false
+            $scanProgress.Style = "Blocks"
+
+            $devices = @()
+
+            if ($script:ScanResultPath -and (Test-Path $script:ScanResultPath)) {
+                try {
+                    $raw = Get-Content $script:ScanResultPath -Raw -ErrorAction Stop
+                    if (-not [string]::IsNullOrWhiteSpace($raw)) {
+                        $devices = @($raw | ConvertFrom-Json)
+                    }
+                } catch {
+                    UiLog ("Đọc kết quả quét lỗi: " + $_.Exception.Message)
+                }
+            }
+
+            $elapsed = 0
+            if ($script:ScanStartedAt) {
+                $elapsed = [int]((Get-Date) - $script:ScanStartedAt).TotalSeconds
+            }
+
+            UiLog ("Quét nền hoàn tất sau " + $elapsed + "s; tìm thấy " + $devices.Count + " thiết bị")
+
+            try { Remove-Item $script:ScanResultPath -Force -ErrorAction SilentlyContinue } catch {}
+            try { Remove-Item $script:ScanProgressPath -Force -ErrorAction SilentlyContinue } catch {}
+
+            $script:ScanProcess = $null
+            $scanProgress.Value = 100
+
+            Show-ScanResults -Devices $devices
+        }
+    })
+
+    # Events
+    $btnFind.Add_Click({ Start-AsyncScan })
+    $btnCancelScan.Add_Click({ Stop-AsyncScan })
+    $btnConnect.Add_Click({ Connect-IP })
+
+    $btnRefresh.Add_Click({
+        if ($script:CurrentIP) {
+            $txtIP.Text = $script:CurrentIP
+        }
+        Connect-IP
+    })
+
+    $btnWeb.Add_Click({
+        if ($script:CurrentIP) {
+            Start-Process ("http://" + $script:CurrentIP + "/")
+        }
+    })
+
+    $btnSupport.Add_Click({
+        Show-OtaWindow
+    })
+
+    $btnReloadDrivers.Add_Click({
+        Load-Drivers
+        Filter-Drivers
+    })
+
+    $txtDriverSearch.Add_TextChanged({
+        Filter-Drivers
+    })
+
+    $A.Button.Add_Click({ Install-PrinterFor "A" 9101 })
+    $B.Button.Add_Click({ Install-PrinterFor "B" 9102 })
+    $C.Button.Add_Click({ Install-PrinterFor "C" 9103 })
+
+    $txtIP.Add_KeyDown({
+        if ($_.KeyCode -eq [Windows.Forms.Keys]::Enter) {
+            Connect-IP
+            $_.SuppressKeyPress = $true
+        }
+    })
+
+    Load-Drivers
+
+    UiLog "Lumitool Printsever Setup V3.8"
+    UiLog "Hỗ trợ mọi máy in có driver Windows đã được cài."
+    UiLog "A=9101 · B=9102 · C=9103 · Fast Completion: Direct + SNMP/BIDI OFF"
+    UiLog ("Debug log: " + $LogPath)
+
+    $form.Add_FormClosing({
+        try { $scanTimer.Stop() } catch {}
+        if ($script:ScanProcess -and -not $script:ScanProcess.HasExited) {
+            try { $script:ScanProcess.Kill() } catch {}
+        }
+    })
+
+    [void]$form.ShowDialog()
+    Write-DebugLog "=== NORMAL EXIT ==="
+}
+catch {
+    $msg = $_.Exception.Message
+    $detail = $_ | Out-String
+
+    Write-DebugLog ("FATAL: " + $detail)
+
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+        [System.Windows.Forms.MessageBox]::Show(
+            "Lumitool Printsever Setup gặp lỗi:`r`n`r`n" + $msg + "`r`n`r`nLog:`r`n" + $LogPath,
+            "Lumitool Printsever Setup - Lỗi",
+            "OK",
+            "Error"
+        ) | Out-Null
+    } catch {}
+
+    Write-Host ""
+    Write-Host "ESP PRINT SERVER SETUP ERROR" -ForegroundColor Red
+    Write-Host $detail
+    Write-Host ""
+    Write-Host ("Log: " + $LogPath)
+    Read-Host "Nhan Enter de dong"
+    exit 1
+}
+) {
+            return $Matches[1].ToUpper()
+        }
+
+        try {
+            $r = Invoke-RestMethod -Uri ("http://" + $script:CurrentIP + "/device-info") -TimeoutSec 2 -ErrorAction Stop
+            if ($r.id) { return ([string]$r.id).ToUpper() }
+        } catch {}
+
+        return ""
+    }
+
+    function Show-OtaWindow {
+        if (-not $script:CurrentIP) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Hãy kết nối Lumitool Printsever trước.",
+                "OTA Firmware",
+                "OK",
+                "Warning"
+            ) | Out-Null
+            return
+        }
+
+        $suffix = Get-CurrentDeviceSuffix
+        if ([string]::IsNullOrWhiteSpace($suffix)) {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Không đọc được mã thiết bị để xác thực OTA.",
+                "OTA Firmware",
+                "OK",
+                "Error"
+            ) | Out-Null
+            return
+        }
+
+        $otaForm = New-Object Windows.Forms.Form
+        $otaForm.Text = "Lumitool Printsever - OTA Firmware"
+        $otaForm.Size = New-Object Drawing.Size(610,355)
+        $otaForm.StartPosition = "CenterParent"
+        $otaForm.FormBorderStyle = "FixedDialog"
+        $otaForm.MaximizeBox = $false
+        $otaForm.MinimizeBox = $false
+        $otaForm.Font = New-Object Drawing.Font("Segoe UI",9)
+
+        try {
+            $logoBase64 = "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"
+            $bytes = [Convert]::FromBase64String($logoBase64)
+            $ms = New-Object IO.MemoryStream(,$bytes)
+            $img = [Drawing.Image]::FromStream($ms)
+            $pb = New-Object Windows.Forms.PictureBox
+            $pb.Location = New-Object Drawing.Point(18,14)
+            $pb.Size = New-Object Drawing.Size(70,70)
+            $pb.SizeMode = "Zoom"
+            $pb.Image = $img
+            $otaForm.Controls.Add($pb)
+        } catch {}
+
+        $title = New-Object Windows.Forms.Label
+        $title.Text = "OTA Firmware"
+        $title.Font = New-Object Drawing.Font("Segoe UI Semibold",18)
+        $title.Location = New-Object Drawing.Point(100,18)
+        $title.AutoSize = $true
+        $otaForm.Controls.Add($title)
+
+        $device = New-Object Windows.Forms.Label
+        $device.Text = $script:CurrentName + "  ·  " + $script:CurrentIP
+        $device.Location = New-Object Drawing.Point(102,54)
+        $device.Size = New-Object Drawing.Size(455,22)
+        $otaForm.Controls.Add($device)
+
+        $txtFile = New-Object Windows.Forms.TextBox
+        $txtFile.Location = New-Object Drawing.Point(18,105)
+        $txtFile.Size = New-Object Drawing.Size(455,26)
+        $txtFile.ReadOnly = $true
+        $otaForm.Controls.Add($txtFile)
+
+        $btnPick = New-Object Windows.Forms.Button
+        $btnPick.Text = "Chọn .bin"
+        $btnPick.Location = New-Object Drawing.Point(480,102)
+        $btnPick.Size = New-Object Drawing.Size(92,31)
+        $otaForm.Controls.Add($btnPick)
+
+        $btnUpload = New-Object Windows.Forms.Button
+        $btnUpload.Text = "NẠP OTA"
+        $btnUpload.Location = New-Object Drawing.Point(18,150)
+        $btnUpload.Size = New-Object Drawing.Size(554,38)
+        $otaForm.Controls.Add($btnUpload)
+
+        $bar = New-Object Windows.Forms.ProgressBar
+        $bar.Location = New-Object Drawing.Point(18,202)
+        $bar.Size = New-Object Drawing.Size(554,18)
+        $bar.Style = "Blocks"
+        $otaForm.Controls.Add($bar)
+
+        $lbl = New-Object Windows.Forms.Label
+        $lbl.Text = "Chọn firmware .bin."
+        $lbl.Location = New-Object Drawing.Point(18,232)
+        $lbl.Size = New-Object Drawing.Size(554,58)
+        $otaForm.Controls.Add($lbl)
+
+        $script:OtaProc = $null
+        $script:OtaResultPath = ""
+        $script:OtaProgressPath = ""
+
+        $otaTimer = New-Object Windows.Forms.Timer
+        $otaTimer.Interval = 350
+        $otaTimer.Add_Tick({
+            if ($script:OtaProgressPath -and (Test-Path $script:OtaProgressPath)) {
+                try {
+                    $p = Get-Content $script:OtaProgressPath -Raw | ConvertFrom-Json
+                    if ($p.text) { $lbl.Text = [string]$p.text }
+                    if ($null -ne $p.percent) {
+                        $bar.Style = "Blocks"
+                        $bar.Value = [Math]::Max(0,[Math]::Min(100,[int]$p.percent))
+                    }
+                } catch {}
+            }
+
+            if ($script:OtaProc -and $script:OtaProc.HasExited) {
+                $otaTimer.Stop()
+                $btnUpload.Enabled = $true
+                $btnPick.Enabled = $true
+
+                try {
+                    if (Test-Path $script:OtaResultPath) {
+                        $r = Get-Content $script:OtaResultPath -Raw | ConvertFrom-Json
+                        if ([bool]$r.ok) {
+                            $bar.Value = 100
+                            $lbl.Text = [string]$r.message
+                            [System.Windows.Forms.MessageBox]::Show(
+                                [string]$r.message,
+                                "OTA thành công",
+                                "OK",
+                                "Information"
+                            ) | Out-Null
+                        } else {
+                            $lbl.Text = [string]$r.message
+                            [System.Windows.Forms.MessageBox]::Show(
+                                [string]$r.message,
+                                "OTA lỗi",
+                                "OK",
+                                "Error"
+                            ) | Out-Null
+                        }
+                    }
+                } catch {
+                    $lbl.Text = "OTA kết thúc nhưng không đọc được kết quả."
+                }
+
+                $script:OtaProc = $null
+            }
+        })
+
+        $btnPick.Add_Click({
+            $ofd = New-Object Windows.Forms.OpenFileDialog
+            $ofd.Filter = "ESP32 firmware (*.bin)|*.bin"
+            $ofd.Title = "Chọn firmware OTA"
+            if ($ofd.ShowDialog($otaForm) -eq [Windows.Forms.DialogResult]::OK) {
+                $txtFile.Text = $ofd.FileName
+            }
+        })
+
+        $btnUpload.Add_Click({
+            if (-not (Test-Path $txtFile.Text)) {
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Hãy chọn file .bin trước.",
+                    "OTA Firmware",
+                    "OK",
+                    "Warning"
+                ) | Out-Null
+                return
+            }
+
+            $helper = Join-Path $PSScriptRoot "Lumitool_OTA_Helper_V1.ps1"
+            if (-not (Test-Path $helper)) {
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Thiếu Lumitool_OTA_Helper_V1.ps1.",
+                    "OTA Firmware",
+                    "OK",
+                    "Error"
+                ) | Out-Null
+                return
+            }
+
+            $token = [Guid]::NewGuid().ToString("N")
+            $script:OtaResultPath = Join-Path $env:TEMP ("Lumitool_OTA_Result_" + $token + ".json")
+            $script:OtaProgressPath = Join-Path $env:TEMP ("Lumitool_OTA_Progress_" + $token + ".json")
+
+            $args = @(
+                "-NoProfile",
+                "-ExecutionPolicy","Bypass",
+                "-File",('"' + $helper + '"'),
+                "-IP",$script:CurrentIP,
+                "-Password",$suffix,
+                "-BinPath",('"' + $txtFile.Text + '"'),
+                "-ResultPath",('"' + $script:OtaResultPath + '"'),
+                "-ProgressPath",('"' + $script:OtaProgressPath + '"')
+            )
+
+            $btnUpload.Enabled = $false
+            $btnPick.Enabled = $false
+            $bar.Style = "Marquee"
+            $bar.MarqueeAnimationSpeed = 25
+            $lbl.Text = "Đang chuẩn bị OTA..."
+
+            try {
+                $script:OtaProc = Start-Process powershell.exe -ArgumentList $args -WindowStyle Hidden -PassThru
+                $otaTimer.Start()
+            } catch {
+                $btnUpload.Enabled = $true
+                $btnPick.Enabled = $true
+                $bar.Style = "Blocks"
+                $bar.Value = 0
+                $lbl.Text = $_.Exception.Message
+            }
+        })
+
+        $otaForm.Add_FormClosing({
+            try { $otaTimer.Stop() } catch {}
+        })
+
+        [void]$otaForm.ShowDialog($form)
+    }
+
     Add-Type -AssemblyName Microsoft.VisualBasic
 
     # =========================== UI ==============================
     $form = New-Object Windows.Forms.Form
-    $form.Text = "Lumitool Printsever V3.7"
+    $form.Text = "Lumitool Printsever V3.8"
     $form.Size = New-Object Drawing.Size(820,690)
     $form.MinimumSize = New-Object Drawing.Size(790,650)
     $form.StartPosition = "CenterScreen"
@@ -2074,7 +2611,7 @@ try {
 
     Load-Drivers
 
-    UiLog "Lumitool Printsever Setup V3.7"
+    UiLog "Lumitool Printsever Setup V3.8"
     UiLog "Hỗ trợ mọi máy in có driver Windows đã được cài."
     UiLog "A=9101 · B=9102 · C=9103 · Fast Completion: Direct + SNMP/BIDI OFF"
     UiLog ("Debug log: " + $LogPath)
