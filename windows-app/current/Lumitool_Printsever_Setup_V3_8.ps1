@@ -2301,12 +2301,12 @@ catch {
             $args = @(
                 "-NoProfile",
                 "-ExecutionPolicy","Bypass",
-                "-File",('"' + $helper + '"'),
+                "-File",("`"" + $helper + "`""),
                 "-IP",$script:CurrentIP,
                 "-Password",$suffix,
-                "-BinPath",('"' + $txtFile.Text + '"'),
-                "-ResultPath",('"' + $script:OtaResultPath + '"'),
-                "-ProgressPath",('"' + $script:OtaProgressPath + '"')
+                "-BinPath",("`"" + $txtFile.Text + "`""),
+                "-ResultPath",("`"" + $script:OtaResultPath + "`""),
+                "-ProgressPath",("`"" + $script:OtaProgressPath + "`"")
             )
 
             $btnUpload.Enabled = $false
