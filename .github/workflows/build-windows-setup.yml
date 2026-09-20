@@ -21,9 +21,11 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $required = @(
-            "windows-app/current/Lumitool_Printsever_Setup_V3_4.ps1",
+            "windows-app/current/Lumitool_Printsever_Setup_V3_5.ps1",
             "windows-app/current/Lumitool_Scan_Helper_V1.ps1",
-            "windows-app/current/CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_4.cmd"
+            "windows-app/current/Lumitool_Fix_Printing_Status_V1.ps1",
+            "windows-app/current/CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_5.cmd",
+            "windows-app/current/FIX_TRANG_THAI_DANG_IN.cmd"
           )
 
           foreach ($path in $required) {
@@ -57,7 +59,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V3_4.ps1" -Raw
+          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V3_5.ps1" -Raw
           $helper = Get-Content "windows-app/current/Lumitool_Scan_Helper_V1.ps1" -Raw
 
           $checks = @(
@@ -66,7 +68,10 @@ jobs:
             @{ Name = "Cancel scan"; Text = "Stop-AsyncScan"; Source = $main },
             @{ Name = "Progress file"; Text = "ProgressPath"; Source = $helper },
             @{ Name = "UDP discovery"; Text = "LUMITOOL_DISCOVER_V1"; Source = $helper },
-            @{ Name = "Home LAN scan"; Text = "Get-NetIPAddress"; Source = $helper }
+            @{ Name = "Home LAN scan"; Text = "Get-NetIPAddress"; Source = $helper },
+            @{ Name = "Fast completion direct"; Text = "Direct              = $true"; Source = $main },
+            @{ Name = "Disable BIDI"; Text = "EnableBIDI          = $false"; Source = $main },
+            @{ Name = "Restart spooler"; Text = "Restart-Service -Name Spooler"; Source = $main }
           )
 
           foreach ($check in $checks) {
@@ -83,27 +88,31 @@ jobs:
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           New-Item -ItemType Directory -Path package -Force | Out-Null
 
-          Copy-Item "windows-app/current/Lumitool_Printsever_Setup_V3_4.ps1" package/
+          Copy-Item "windows-app/current/Lumitool_Printsever_Setup_V3_5.ps1" package/
           Copy-Item "windows-app/current/Lumitool_Scan_Helper_V1.ps1" package/
-          Copy-Item "windows-app/current/CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_4.cmd" package/
+          Copy-Item "windows-app/current/Lumitool_Fix_Printing_Status_V1.ps1" package/
+          Copy-Item "windows-app/current/CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_5.cmd" package/
+          Copy-Item "windows-app/current/FIX_TRANG_THAI_DANG_IN.cmd" package/
 
           @"
-          Lumitool Printsever Windows Setup V3.4
+          Lumitool Printsever Windows Setup V3.5
 
           1. Giai nen ZIP.
-          2. Chay CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_4.cmd.
+          2. Chay CHAY_LUMITOOL_PRINTSEVER_SETUP_V3_5.cmd.
           3. Quet thiet bi chay nen, giao dien khong bi dung/treo.
           4. Co nut HUY de dung quet.
           5. Chon driver may in da cai tren Windows.
           6. Cai Printer A/B/C tuong ung RAW 9101/9102/9103.
+          7. V3.5 bat Fast Completion: Direct=ON, BIDI/SNMP/KeepPrintedJobs=OFF.
+          8. Neu da cai queue cu, chay FIX_TRANG_THAI_DANG_IN.cmd de sua ngay.
           "@ | Set-Content package/README.txt -Encoding UTF8
 
-          Compress-Archive -Path package/* -DestinationPath "dist/Lumitool_Printsever_Windows_Setup_V3_4.zip" -Force
+          Compress-Archive -Path package/* -DestinationPath "dist/Lumitool_Printsever_Windows_Setup_V3_5.zip" -Force
 
       - name: Upload Windows setup artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lumitool-Printsever-Windows-Setup-V3.4
-          path: dist/Lumitool_Printsever_Windows_Setup_V3_4.zip
+          name: Lumitool-Printsever-Windows-Setup-V3.5
+          path: dist/Lumitool_Printsever_Windows_Setup_V3_5.zip
           if-no-files-found: error
           retention-days: 30
