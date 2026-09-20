@@ -23,7 +23,7 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           $required = @(
-            "windows-app/current/Lumitool_Printsever_Setup_V3_9.ps1",
+            "windows-app/current/Lumitool_Printsever_Setup_V3_10.ps1",
             "windows-app/current/Lumitool_Scan_Helper_V1.ps1",
             "windows-app/current/Lumitool_Job_Watcher_V2.ps1",
             "windows-app/current/Lumitool_Fix_Printing_Status_V2.ps1",
@@ -31,7 +31,7 @@ jobs:
             "windows-app/current/Lumitool_Watcher_Install_V2.ps1",
             "windows-app/current/Lumitool_Printsever_Launcher.cmd",
             "windows-app/current/Lumitool_Printsever_Repair.cmd",
-            "windows-app/installer/Lumitool_Printsever_V3_9.iss"
+            "windows-app/installer/Lumitool_Printsever_V3_10.iss"
           )
 
           foreach ($path in $required) {
@@ -66,18 +66,17 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V3_9.ps1" -Raw
+          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V3_10.ps1" -Raw
           $ota = Get-Content "windows-app/current/Lumitool_OTA_Helper_V1.ps1" -Raw
           $watcher = Get-Content "windows-app/current/Lumitool_Job_Watcher_V2.ps1" -Raw
           $watcherInstaller = Get-Content "windows-app/current/Lumitool_Watcher_Install_V2.ps1" -Raw
-          $iss = Get-Content "windows-app/installer/Lumitool_Printsever_V3_9.iss" -Raw
+          $iss = Get-Content "windows-app/installer/Lumitool_Printsever_V3_10.iss" -Raw
 
           $checks = @(
-            @{ Name = "Main installs watcher"; Text = "Install-LumitoolJobWatcher"; Source = $main },
-            @{ Name = "Main saves queue config"; Text = "Save-LumitoolWatcherQueue"; Source = $main },
+            @{ Name = "Main checks watcher task"; Text = "Test-LumitoolJobWatcher"; Source = $main },
             @{ Name = "Watcher reads ESP jobs API"; Text = "/api/jobs"; Source = $watcher },
             @{ Name = "Watcher clears completed Windows jobs"; Text = "Remove-PrintJob"; Source = $watcher },
-            @{ Name = "Installer includes main setup"; Text = "Lumitool_Printsever_Setup_V3_9.ps1"; Source = $iss },
+            @{ Name = "Installer includes main setup"; Text = "Lumitool_Printsever_Setup_V3_10.ps1"; Source = $iss },
             @{ Name = "Installer includes watcher"; Text = "Lumitool_Job_Watcher_V2.ps1"; Source = $iss },
             @{ Name = "Installer auto launches setup"; Text = "[Run]"; Source = $iss },
             @{ Name = "OTA dialog"; Text = "Start-LumitoolOta"; Source = $main },
@@ -87,12 +86,19 @@ jobs:
             @{ Name = "Watcher auto discovery"; Text = "AUTO-DISCOVERY"; Source = $watcher },
             @{ Name = "Watcher fallback delete"; Text = "Win32_PrintJob.Delete"; Source = $watcher },
             @{ Name = "Watcher boot install"; Text = "Register-ScheduledTask"; Source = $watcherInstaller },
-            @{ Name = "Installer runs watcher setup"; Text = "Lumitool_Watcher_Install_V2.ps1"; Source = $iss }
+            @{ Name = "Installer runs watcher setup"; Text = "Lumitool_Watcher_Install_V2.ps1"; Source = $iss },
+            @{ Name = "No prncnfg dependency"; Text = "Restart-Service -Name Spooler"; Source = $main; MustBeAbsent = $true }
           )
 
           foreach ($check in $checks) {
-            if (-not $check.Source.Contains($check.Text)) {
-              throw "Static check failed: $($check.Name)"
+            if ($check.MustBeAbsent) {
+              if ($check.Source.Contains($check.Text)) {
+                throw "Static check failed: $($check.Name)"
+              }
+            } else {
+              if (-not $check.Source.Contains($check.Text)) {
+                throw "Static check failed: $($check.Name)"
+              }
             }
             Write-Host "OK: $($check.Name)"
           }
@@ -127,12 +133,12 @@ jobs:
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Path dist -Force | Out-Null
 
-          & "$env:ISCC" "windows-app\installer\Lumitool_Printsever_V3_9.iss"
+          & "$env:ISCC" "windows-app\installer\Lumitool_Printsever_V3_10.iss"
           if ($LASTEXITCODE -ne 0) {
             throw "Inno Setup failed with exit code $LASTEXITCODE"
           }
 
-          $exe = "dist\Lumitool_Printsever_Setup_V3_9.exe"
+          $exe = "dist\Lumitool_Printsever_Setup_V3_10.exe"
           if (-not (Test-Path $exe)) {
             throw "Installer EXE was not created"
           }
@@ -147,7 +153,7 @@ jobs:
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lumitool-Printsever-Setup-V3.9-EXE
-          path: dist/Lumitool_Printsever_Setup_V3_9.exe
+          name: Lumitool-Printsever-Setup-V3.10-EXE
+          path: dist/Lumitool_Printsever_Setup_V3_10.exe
           if-no-files-found: error
           retention-days: 30
