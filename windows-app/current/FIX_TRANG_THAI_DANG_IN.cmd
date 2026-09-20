@@ -9,7 +9,7 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0Lumitool_Fix_Printing_Status_V1.ps1"
+powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0Lumitool_Fix_Printing_Status_V2.ps1"
 
 if %errorlevel% neq 0 (
     echo.
