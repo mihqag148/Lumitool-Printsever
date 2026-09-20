@@ -25,7 +25,7 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           $required = @(
-            "windows-app/current/Lumitool_Printsever_Setup_V4_3.ps1",
+            "windows-app/current/Lumitool_Printsever_Setup_V4_4.ps1",
             "windows-app/current/Lumitool_Scan_Helper_V1.ps1",
             "windows-app/current/Lumitool_Job_Watcher_V2.ps1",
             "windows-app/current/Lumitool_OTA_Helper_V1.ps1",
@@ -34,7 +34,7 @@ jobs:
             "windows-app/launcher/Lumitool_Printsever_Launcher.cs",
             "windows-app/launcher/Lumitool_Printsever_Launcher.manifest",
             "windows-app/assets/Lumi3D_logo.png",
-            "windows-app/installer/Lumitool_Printsever_V4_3.iss"
+            "windows-app/installer/Lumitool_Printsever_V4_4.iss"
           )
 
           foreach ($path in $required) {
@@ -69,18 +69,19 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V4_3.ps1" -Raw
+          $main = Get-Content "windows-app/current/Lumitool_Printsever_Setup_V4_4.ps1" -Raw
           $ota = Get-Content "windows-app/current/Lumitool_OTA_Helper_V1.ps1" -Raw
           $watcher = Get-Content "windows-app/current/Lumitool_Job_Watcher_V2.ps1" -Raw
           $watcherInstaller = Get-Content "windows-app/current/Lumitool_Watcher_Install_V2.ps1" -Raw
           $cleanup = Get-Content "windows-app/current/Lumitool_Preinstall_Cleanup_V1.ps1" -Raw
           $launcher = Get-Content "windows-app/launcher/Lumitool_Printsever_Launcher.cs" -Raw
-          $iss = Get-Content "windows-app/installer/Lumitool_Printsever_V4_3.iss" -Raw
+          $iss = Get-Content "windows-app/installer/Lumitool_Printsever_V4_4.iss" -Raw
 
           $checks = @(
-            @{ Name = "Spooling uses Microsoft prncnfg"; Text = "Find-PrnCfgVbs"; Source = $main },
-            @{ Name = "Direct mode disabled"; Text = '"-direct"'; Source = $main },
-            @{ Name = "Start immediately"; Text = '"-queued"'; Source = $main },
+            @{ Name = "Native Winspool queue configuration"; Text = "SetFastSpoolMode"; Source = $main },
+            @{ Name = "Native SetPrinter level 5"; Text = "SetPrinter(hPrinter, 5"; Source = $main },
+            @{ Name = "Direct and queued bits cleared"; Text = "0x00000001u"; Source = $main },
+            @{ Name = "No prncnfg queue mutation"; Text = '$output = & cscript.exe @args 2>&1'; Source = $main; MustBeAbsent = $true },
             @{ Name = "No bulk CIM printer mutation"; Text = "Set-CimInstance -InputObject $wmiPrinter"; Source = $main; MustBeAbsent = $true },
             @{ Name = "Queue visibility verification"; Text = "Wait-PrinterVisible"; Source = $main },
             @{ Name = "RAW endpoint verification"; Text = "Test-RawEndpoint"; Source = $main },
@@ -197,12 +198,12 @@ jobs:
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Path dist -Force | Out-Null
 
-          & "$env:ISCC" "windows-app\installer\Lumitool_Printsever_V4_3.iss"
+          & "$env:ISCC" "windows-app\installer\Lumitool_Printsever_V4_4.iss"
           if ($LASTEXITCODE -ne 0) {
             throw "Inno Setup failed with exit code $LASTEXITCODE"
           }
 
-          $exe = "dist\Lumitool_Printsever_Setup_V4_3.exe"
+          $exe = "dist\Lumitool_Printsever_Setup_V4_4.exe"
           if (-not (Test-Path $exe)) {
             throw "Installer EXE was not created"
           }
@@ -215,7 +216,7 @@ jobs:
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lumitool-Printsever-Setup-V4.3-EXE
-          path: dist/Lumitool_Printsever_Setup_V4_3.exe
+          name: Lumitool-Printsever-Setup-V4.4-EXE
+          path: dist/Lumitool_Printsever_Setup_V4_4.exe
           if-no-files-found: error
           retention-days: 30
