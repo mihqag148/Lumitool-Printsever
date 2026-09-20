@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$ResultPath,
     [Parameter(Mandatory=$true)][string]$ProgressPath,
     [string]$CachePath = ""
