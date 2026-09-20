@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $LogPath = Join-Path $env:TEMP "Lumitool_Printsever_Setup_V3_3.log"
 
