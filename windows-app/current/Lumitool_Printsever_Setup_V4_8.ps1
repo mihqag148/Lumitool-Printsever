@@ -1269,6 +1269,7 @@ try {
             '" attributes ' +
             $Attribute
 
+        # V48_PRINTUI_TIMEOUT_6S
         UiLog("QUEUE/PRINTUI: áp dụng " + $Attribute + " (timeout 6s)")
 
         $p = Start-Process -FilePath $rundll32 -ArgumentList $argLine -WindowStyle Hidden -PassThru -ErrorAction Stop
