@@ -1,10 +1,10 @@
-$ErrorActionPreference = "SilentlyContinue"
-
 param(
     [Parameter(Mandatory=$true)][string]$ResultPath,
     [Parameter(Mandatory=$true)][string]$ProgressPath,
     [string]$CachePath = ""
 )
+
+$ErrorActionPreference = "SilentlyContinue"
 
 function Write-State {
     param([int]$Percent, [string]$Text)
