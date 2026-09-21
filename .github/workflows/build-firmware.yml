@@ -33,11 +33,11 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          rm -rf build/Lumitool_Printsever_V7_7
-          mkdir -p build/Lumitool_Printsever_V7_7
-          cp firmware/current/Lumitool_Printsever_V7_7.ino build/Lumitool_Printsever_V7_7/
-          cp firmware/current/build_opt.h build/Lumitool_Printsever_V7_7/
-          cp firmware/current/partitions.csv build/Lumitool_Printsever_V7_7/
+          rm -rf build/Lumitool_Printsever_V7_8
+          mkdir -p build/Lumitool_Printsever_V7_8
+          cp firmware/current/Lumitool_Printsever_V7_8.ino build/Lumitool_Printsever_V7_8/
+          cp firmware/current/build_opt.h build/Lumitool_Printsever_V7_8/
+          cp firmware/current/partitions.csv build/Lumitool_Printsever_V7_8/
 
       - name: Compile ESP32-S2 firmware
         shell: bash
@@ -48,7 +48,7 @@ jobs:
             --clean \
             --fqbn "esp32:esp32:esp32s2:PSRAM=enabled,FlashSize=4M,FlashMode=qio" \
             --output-dir dist \
-            build/Lumitool_Printsever_V7_7
+            build/Lumitool_Printsever_V7_8
 
       - name: Prepare firmware package
         shell: bash
@@ -60,15 +60,15 @@ jobs:
             echo "Application .bin not found"
             exit 1
           fi
-          cp "$APP_BIN" dist/Lumitool_Printsever_V7_7_OTA.bin
-          cp firmware/current/Lumitool_Printsever_V7_7.ino dist/
+          cp "$APP_BIN" dist/Lumitool_Printsever_V7_8_OTA.bin
+          cp firmware/current/Lumitool_Printsever_V7_8.ino dist/
           cp firmware/current/build_opt.h dist/
           cp firmware/current/partitions.csv dist/
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lumitool-Printsever-Firmware-V7.7
+          name: Lumitool-Printsever-Firmware-V7.8
           path: dist/*
           if-no-files-found: error
           retention-days: 30
