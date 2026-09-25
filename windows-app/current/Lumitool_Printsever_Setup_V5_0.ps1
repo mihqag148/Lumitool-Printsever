@@ -428,35 +428,57 @@ try {
         }
 
         try {
-            if (
-                -not
-                (Test-Path $script:CacheDir)
-            ) {
-                New-Item `
-                    -ItemType Directory `
-                    -Path $script:CacheDir `
-                    -Force |
-                    Out-Null
+            if (-not (Test-Path $script:CacheDir)) {
+                New-Item -ItemType Directory -Path $script:CacheDir -Force | Out-Null
             }
 
-            $id =
-                ([string]$Device.ID).ToUpper()
+            $id = ([string]$Device.ID).ToUpper()
 
             if (
                 -not $id -and
                 [string]$Device.Name -match
-                '([0-9A-Fa-f]{4})
+                '([0-9A-Fa-f]{4})$'
+            ) {
+                $id = $Matches[1].ToUpper()
+            }
+
+            $uid = (([string]$Device.UID).ToUpper() -replace '[^0-9A-F]', '')
+
+            $keep = @()
+
+            foreach ($x in @(Load-CachedDevices)) {
+                if ([string]$x.IP -eq [string]$Device.IP) {
+                    continue
+                }
+
+                if ($uid -and (([string]$x.UID).ToUpper() -eq $uid)) {
+                    continue
+                }
+
+                if (
+                    -not $uid -and
+                    $id -and
+                    (([string]$x.ID).ToUpper() -eq $id)
+                ) {
+                    continue
+                }
+
+                $keep += $x
+            }
+
+            $keep += [pscustomobject]@{
+                ID = $id
+                UID = $uid
+                IP = [string]$Device.IP
+                Name = [string]$Device.Name
+                LastSeen = (Get-Date).ToString("s")
+            }
 
             $keep |
-                ConvertTo-Json -Depth 3 |
-                Set-Content `
-                    -Path $script:CachePath `
-                    -Encoding UTF8
+                ConvertTo-Json -Depth 4 |
+                Set-Content -Path $script:CachePath -Encoding UTF8
         } catch {
-            UiLog(
-                "Lưu IP thiết bị lỗi: " +
-                $_.Exception.Message
-            )
+            UiLog("Lưu IP thiết bị lỗi: " + $_.Exception.Message)
         }
     }
 
