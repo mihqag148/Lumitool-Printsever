@@ -864,13 +864,16 @@ void buildIdentity() {
   macSuffix =
     suffix;
 
+  // Network-facing identity uses the full hardware UID so several
+  // Lumitool Printservers can coexist without SSID/mDNS collisions.
+  // The short 4-digit ID remains available for display/support login.
   apSsid =
     "Lumitool-Printsever-" +
-    macSuffix;
+    deviceUid;
 
   hostName =
     "Lumitool-Printsever-" +
-    macSuffix;
+    deviceUid;
 
   localUrl =
     "http://" +
