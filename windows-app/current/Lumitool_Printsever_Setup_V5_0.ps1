@@ -1592,7 +1592,7 @@ try {
         }
 
         $driverObj =
-            Get-PrinterDriver `            Get-PrinterDriver `
+            Get-PrinterDriver `
                 -Name $driver `
                 -ErrorAction SilentlyContinue
 
@@ -1657,7 +1657,7 @@ try {
             "_" +
             $TcpPort
 
-        try {        try {
+        try {
             $lblTop.Text =
                 "Đang cài Printer " +
                 $Letter +
