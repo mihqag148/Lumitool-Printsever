@@ -59,7 +59,17 @@ function Test-Lumitool {
             }
 
             $id = ""
-            if ($name -match '([0-9A-Fa-f]{4})
+            if ($name -match '([0-9A-Fa-f]{4})$') {
+                $id = $Matches[1].ToUpper()
+            }
+
+            return [pscustomobject]@{
+                IP = [string]$IP
+                Name = $name
+                ID = $id
+                UID = ""
+                Strong = $false
+            }
         }
     } catch {}
 
