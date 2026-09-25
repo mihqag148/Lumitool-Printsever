@@ -29,7 +29,7 @@ jobs:
             "windows-app/current/Lumitool_Scan_Helper_V1.ps1",
             "windows-app/current/Lumitool_Job_Watcher_V3.ps1",
             "windows-app/current/Lumitool_OTA_Helper_V1.ps1",
-            "windows-app/current/Lumitool_Preinstall_Cleanup_V1.ps1",
+            "windows-app/current/Lumitool_Preinstall_Cleanup_V2.ps1",
             "windows-app/current/Lumitool_Watcher_Install_V3.ps1",
             "windows-app/launcher/Lumitool_Printsever_Launcher.cs",
             "windows-app/launcher/Lumitool_Printsever_Launcher.manifest",
@@ -73,7 +73,7 @@ jobs:
           $ota = Get-Content "windows-app/current/Lumitool_OTA_Helper_V1.ps1" -Raw
           $watcher = Get-Content "windows-app/current/Lumitool_Job_Watcher_V3.ps1" -Raw
           $watcherInstaller = Get-Content "windows-app/current/Lumitool_Watcher_Install_V3.ps1" -Raw
-          $cleanup = Get-Content "windows-app/current/Lumitool_Preinstall_Cleanup_V1.ps1" -Raw
+          $cleanup = Get-Content "windows-app/current/Lumitool_Preinstall_Cleanup_V2.ps1" -Raw
           $launcher = Get-Content "windows-app/launcher/Lumitool_Printsever_Launcher.cs" -Raw
           $iss = Get-Content "windows-app/installer/Lumitool_Printsever_V5_0.iss" -Raw
 
@@ -101,9 +101,9 @@ jobs:
             @{ Name = "OTA dialog"; Text = "Start-LumitoolOta"; Source = $main },
             @{ Name = "OTA prepare"; Text = "/support/prepare"; Source = $ota },
             @{ Name = "OTA upload"; Text = "/update"; Source = $ota },
-            @{ Name = "Clean install cleanup"; Text = "Lumitool_Preinstall_Cleanup_V1.ps1"; Source = $iss },
-            @{ Name = "Cleanup removes old queues"; Text = "Remove-Printer"; Source = $cleanup },
-            @{ Name = "Cleanup removes old ports"; Text = "Remove-PrinterPort"; Source = $cleanup },
+            @{ Name = "Safe upgrade cleanup"; Text = "Lumitool_Preinstall_Cleanup_V2.ps1"; Source = $iss },
+            @{ Name = "Cleanup preserves existing queues"; Text = "Existing Lumitool printer queues preserved."; Source = $cleanup },
+            @{ Name = "Cleanup preserves existing ports"; Text = "Existing Lumitool TCP/IP ports preserved."; Source = $cleanup },
             @{ Name = "Cleanup preserves manufacturer drivers"; Text = "Vendor printer drivers preserved"; Source = $cleanup },
             @{ Name = "Hidden WinExe launcher"; Text = "CreateNoWindow = true"; Source = $launcher },
             @{ Name = "Launcher self elevation"; Text = 'Verb = "runas"'; Source = $launcher },
