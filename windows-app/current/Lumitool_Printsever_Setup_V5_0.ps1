@@ -1581,8 +1581,18 @@ try {
         $driver =
             [string]$cmbDriver.SelectedItem
 
-        if ($driver -match '^Microsoft enhanced Point and Print compatibility driver
-            Get-PrinterDriver `
+        if ($driver -match '^Microsoft enhanced Point and Print compatibility driver$') {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Driver Microsoft compatibility này không phù hợp cho RAW print server.`r`n`r`nHãy chọn driver thật của máy in (ví dụ SP46).",
+                "Chọn driver của máy in",
+                "OK",
+                "Warning"
+            ) | Out-Null
+            return
+        }
+
+        $driverObj =
+            Get-PrinterDriver `            Get-PrinterDriver `
                 -Name $driver `
                 -ErrorAction SilentlyContinue
 
@@ -1635,9 +1645,19 @@ try {
 
         $portKey = $suffix
 
-        if ($script:CurrentUID -match '^[0-9A-Fa-f]{12}
+        if ($script:CurrentUID -match '^[0-9A-Fa-f]{12}$') {
+            $portKey = $script:CurrentUID.ToUpper()
+        }
 
-        try {
+        $portName =
+            "LUMITOOL_" +
+            $portKey +
+            "_" +
+            $Letter +
+            "_" +
+            $TcpPort
+
+        try {        try {
             $lblTop.Text =
                 "Đang cài Printer " +
                 $Letter +
