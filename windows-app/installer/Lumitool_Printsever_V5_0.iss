@@ -27,7 +27,7 @@ RestartApplications=no
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Files]
-Source: "..\current\Lumitool_Preinstall_Cleanup_V1.ps1"; Flags: dontcopy
+Source: "..\current\Lumitool_Preinstall_Cleanup_V2.ps1"; Flags: dontcopy
 Source: "..\current\Lumitool_Printsever_Setup_V5_0.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\current\Lumitool_Scan_Helper_V1.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\current\Lumitool_Job_Watcher_V3.ps1"; DestDir: "{app}"; Flags: ignoreversion
@@ -67,10 +67,10 @@ var
 begin
   Result := '';
 
-  ExtractTemporaryFile('Lumitool_Preinstall_Cleanup_V1.ps1');
+  ExtractTemporaryFile('Lumitool_Preinstall_Cleanup_V2.ps1');
 
   PowerShellExe := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
-  ScriptPath := ExpandConstant('{tmp}\Lumitool_Preinstall_Cleanup_V1.ps1');
+  ScriptPath := ExpandConstant('{tmp}\Lumitool_Preinstall_Cleanup_V2.ps1');
   Params := '-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + ScriptPath + '"';
 
   if not Exec(PowerShellExe, Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
